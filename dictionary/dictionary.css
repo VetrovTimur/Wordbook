@@ -1069,3 +1069,155 @@ body.view-stats #importWordsBtn { display: none !important; }
   .feedback-intro { font-size: 12.5px; margin-bottom: 16px; }
   #feedbackText { min-height: 100px; font-size: 14px; }
 }
+
+/* ======================== ЧТО НОВОГО ======================== */
+.whats-new-badge {
+  margin-left: auto;
+  background: var(--gold);
+  color: var(--paper);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-style: normal;
+  letter-spacing: 0.6px;
+  min-width: 24px;
+  text-align: center;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+.whats-new-badge[hidden] { display: none; }
+
+.whats-new-intro {
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+  font-style: italic;
+  margin-top: -14px;
+  margin-bottom: 20px;
+  letter-spacing: 0.5px;
+}
+
+/* Контейнер со скроллом — padding сверху, чтобы карточки
+   при hover не уходили за границу и не обрезались */
+.whats-new-scroll {
+  max-height: 58vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 8px 6px 0;
+  margin: -6px -8px -6px 0;
+}
+.whats-new-scroll::-webkit-scrollbar { width: 6px; }
+.whats-new-scroll::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 4px; }
+
+.whats-new-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.whats-new-card {
+  display: flex;
+  gap: 11px;
+  padding: 13px 14px;
+  background: var(--paper-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  align-items: flex-start;
+}
+.whats-new-card:hover {
+  border-color: var(--accent);
+  background: var(--paper);
+  box-shadow: 0 4px 14px rgba(122, 92, 62, 0.12);
+}
+
+/* ---------- Иконки ---------- */
+.whats-new-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid;
+}
+.whats-new-icon svg { width: 16px; height: 16px; stroke-width: 2.2; }
+
+/* ===== СВЕТЛАЯ ТЕМА — насыщенные заливки ===== */
+
+/* 🟤 Новое — accent (коричневый) */
+.whats-new-card[data-type="feature"] .whats-new-icon {
+  color: #ffffff;
+  background: #8b6942;
+  border-color: #6b4f2c;
+}
+
+/* 🟡 Улучшения — золотой */
+.whats-new-card[data-type="improve"] .whats-new-icon {
+  color: #ffffff;
+  background: #b08d57;
+  border-color: #8a6c3d;
+}
+
+/* 🔵 Информация — синеватый */
+.whats-new-card[data-type="info"] .whats-new-icon {
+  color: #ffffff;
+  background: #5e7899;
+  border-color: #425878;
+}
+
+/* 🟢 Исправления — зелёный */
+.whats-new-card[data-type="fix"] .whats-new-icon {
+  color: #ffffff;
+  background: #6a8a51;
+  border-color: #4d6b39;
+}
+
+/* ===== ТЁМНАЯ ТЕМА — приглушённые, с цветной обводкой ===== */
+[data-theme="dark"] .whats-new-card[data-type="feature"] .whats-new-icon {
+  color: #e0c79b;
+  background: rgba(201, 169, 122, 0.18);
+  border-color: rgba(201, 169, 122, 0.55);
+}
+[data-theme="dark"] .whats-new-card[data-type="improve"] .whats-new-icon {
+  color: #e8c988;
+  background: rgba(212, 177, 118, 0.18);
+  border-color: rgba(212, 177, 118, 0.55);
+}
+[data-theme="dark"] .whats-new-card[data-type="info"] .whats-new-icon {
+  color: #a8bedd;
+  background: rgba(139, 165, 199, 0.2);
+  border-color: rgba(139, 165, 199, 0.55);
+}
+[data-theme="dark"] .whats-new-card[data-type="fix"] .whats-new-icon {
+  color: #a4c78a;
+  background: rgba(134, 168, 109, 0.2);
+  border-color: rgba(134, 168, 109, 0.55);
+}
+
+/* ---------- Текст карточки ---------- */
+.whats-new-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.whats-new-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.whats-new-text {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .whats-new-grid { grid-template-columns: 1fr; gap: 8px; }
+  .whats-new-scroll { max-height: 52vh; }
+  .whats-new-card { padding: 11px 12px; gap: 10px; }
+  .whats-new-icon { width: 30px; height: 30px; }
+  .whats-new-icon svg { width: 14px; height: 14px; }
+  .whats-new-title { font-size: 13px; }
+  .whats-new-text { font-size: 11.5px; }
+}

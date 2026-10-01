@@ -766,6 +766,8 @@ document.addEventListener('keydown', (e) => {
     if (impModal && impModal.classList.contains('show')) closeImportModal();
     const fbModal = document.getElementById('feedbackModal');
     if (fbModal && fbModal.classList.contains('show')) closeFeedbackModal();
+    const wnModal = document.getElementById('whatsNewModal');
+    if (wnModal && wnModal.classList.contains('show')) closeWhatsNewModal();
   }
 });
 
@@ -1482,6 +1484,100 @@ feedbackModal.addEventListener('click', (e) => {
   if (e.target === feedbackModal) closeFeedbackModal();
 });
 
+/* ============================================================
+   ЧТО НОВОГО
+   ============================================================ */
+
+const UPDATES_VERSION = 1;
+const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_';
+
+const UPDATES = [
+  { type: 'feature', icon: 'chart',  title: 'Статистика занятий',           text: 'Серии заходов, лучший результат, дни с нами и пропуски — дневник ваших занятий.' },
+  { type: 'feature', icon: 'import', title: 'Импорт слов из Excel',         text: 'Вставьте список или загрузите файл .xlsx / .csv, до 100 слов за раз.' },
+  { type: 'feature', icon: 'search', title: 'Умный поиск',                  text: 'Ищите по слову, переводу или транскрипции.' },
+  { type: 'improve', icon: 'mic',    title: 'Автоматическая транскрипция',  text: 'Вводите английское слово — произношение подставится само.' },
+  { type: 'improve', icon: 'volume', title: 'Озвучка слов',                 text: 'Английский и русский в один клик, прямо из таблицы.' },
+  { type: 'improve', icon: 'lock',   title: 'Безопасность аккаунтов',       text: 'SHA-256 хэш паролей, отдельный вход для администратора.' },
+  { type: 'info',    icon: 'chat',   title: 'Обратная связь',               text: 'Прямая линия с администратором прямо из словаря.' },
+  { type: 'info',    icon: 'moon',   title: 'Тёмная тема',                  text: 'Комфортное чтение днём и ночью.' },
+  { type: 'fix',     icon: 'mobile', title: 'Фикс: разделы на мобильных',   text: 'Больше не пропадают при переключении страниц.' },
+  { type: 'fix',     icon: 'zap',    title: 'Скорость и стабильность',      text: 'Аккуратные сохранения, кэш запросов, мягкие уведомления.' },
+  { type: 'fix',     icon: 'shield', title: 'Защита данных',                text: 'Умные правила, разграничение прав доступа.' },
+  { type: 'fix',     icon: 'star',   title: 'Чистый интерфейс',             text: 'Убрали лишнее, починили мелкие баги.' },
+];
+
+const UPDATE_ICONS = {
+  chart:  '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  import: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  mic:    '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+  volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+  lock:   '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  chat:   '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  moon:   '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  mobile: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+  zap:    '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+};
+
+function getUpdatesSeenKey() {
+  return UPDATES_KEY_PREFIX + (currentUserName || 'anon');
+}
+function getUpdatesSeen() {
+  try {
+    const v = localStorage.getItem(getUpdatesSeenKey());
+    return v ? parseInt(v, 10) : 0;
+  } catch (e) { return 0; }
+}
+function setUpdatesSeen() {
+  try { localStorage.setItem(getUpdatesSeenKey(), String(UPDATES_VERSION)); } catch (e) {}
+}
+
+function updateWhatsNewBadge() {
+  const badge = document.getElementById('whatsNewBadge');
+  if (!badge) return;
+  badge.hidden = !(UPDATES_VERSION > getUpdatesSeen());
+}
+
+function renderWhatsNew() {
+  const grid = document.getElementById('whatsNewGrid');
+  if (!grid) return;
+  grid.innerHTML = UPDATES.map(u => `
+    <div class="whats-new-card" data-type="${u.type}">
+      <div class="whats-new-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          ${UPDATE_ICONS[u.icon] || UPDATE_ICONS.star}
+        </svg>
+      </div>
+      <div class="whats-new-body">
+        <div class="whats-new-title">${escapeHtml(u.title)}</div>
+        <div class="whats-new-text">${escapeHtml(u.text)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openWhatsNewModal() {
+  renderWhatsNew();
+  document.getElementById('whatsNewModal').classList.add('show');
+  setUpdatesSeen();
+  updateWhatsNewBadge();
+}
+function closeWhatsNewModal() {
+  document.getElementById('whatsNewModal').classList.remove('show');
+}
+
+document.getElementById('menuWhatsNew').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  openWhatsNewModal();
+});
+document.getElementById('whatsNewOk').addEventListener('click', closeWhatsNewModal);
+document.getElementById('whatsNewModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('whatsNewModal')) closeWhatsNewModal();
+});
+
 /* Инициализация */
 async function initApp() {
   currentUserName = getCurrentUser();
@@ -1526,6 +1622,7 @@ async function initApp() {
 
   render();
   renderUserMenu();
+  updateWhatsNewBadge();
 
   /* Показать подсказку после прелоадера, один раз */
   setTimeout(showTrHintIfNeeded, PRELOADER_MIN_TIME + 100);
