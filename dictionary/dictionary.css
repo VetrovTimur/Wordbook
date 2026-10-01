@@ -956,10 +956,11 @@ body.view-stats #importWordsBtn { display: none !important; }
 .import-stat-label {
   font-size: 9.5px; text-transform: uppercase;
   letter-spacing: 1.4px; color: var(--ink-3); font-weight: 600;
+  text-align: center;
 }
 .import-stat-value {
   font-size: 20px; font-weight: 700; font-style: italic;
-  color: var(--ink); line-height: 1.1;
+  color: var(--ink); line-height: 1.1; text-align: center;
 }
 
 .import-warning {
@@ -1024,4 +1025,47 @@ body.view-stats #importWordsBtn { display: none !important; }
   .ip-tr { font-size: 11.5px; }
   .import-stat { min-width: 70px; padding: 5px 10px; }
   .import-stat-value { font-size: 17px; }
+}
+
+/* ======================== ОБРАТНАЯ СВЯЗЬ ======================== */
+.feedback-intro {
+  font-size: 14px;
+  text-align: center;
+  color: var(--ink-3);
+  font-style: italic;
+  margin-bottom: 22px;
+  line-height: 1.55;
+}
+#feedbackText {
+  width: 100%;
+  min-height: 130px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+#feedbackText:focus { border-color: var(--accent); }
+#feedbackText::placeholder { color: var(--ink-3); opacity: 0.65; font-style: italic; }
+#feedbackText.error { border-color: var(--danger); }
+.feedback-counter {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  margin-top: -14px;
+  margin-bottom: 18px;
+  font-style: italic;
+  letter-spacing: 0.3px;
+}
+.feedback-counter.warn { color: var(--danger); }
+
+@media (max-width: 640px) {
+  .feedback-intro { font-size: 12.5px; margin-bottom: 16px; }
+  #feedbackText { min-height: 100px; font-size: 14px; }
 }

@@ -6,6 +6,7 @@ const PRELOADER_MIN_TIME = 1000;
 
 let users = [];
 let logs = [];
+let feedbacks = [];
 let currentUserData = null;
 let currentSearch = '';
 let currentFilter = 'all';
@@ -15,6 +16,10 @@ let currentNav = 'users';
 let logSearch = '';
 let logFilter = 'all';
 let logPage = 1;
+
+let feedbackSearch = '';
+let feedbackFilter = 'all';
+let feedbackPage = 1;
 
 /* Тема */
 function loadTheme() {
@@ -32,6 +37,11 @@ function applyTheme() {
 /* Логи */
 async function loadLogs() {
   logs = await fbGetLogs(500);
+}
+
+/* Обратная связь */
+async function loadFeedback() {
+  feedbacks = await fbGetAllFeedback(500);
 }
 
 const LOG_TYPES = {
@@ -65,6 +75,11 @@ const LOG_TYPES = {
 function updateLogsBadge() {
   const badge = document.getElementById('navLogsBadge');
   if (badge) badge.textContent = logs.length;
+}
+
+function updateFeedbackBadge() {
+  const badge = document.getElementById('navFeedbackBadge');
+  if (badge) badge.textContent = feedbacks.filter(f => !f.read).length;
 }
 
 /* Пользователи */
@@ -192,30 +207,48 @@ function getLogPageSlice() {
 function render() {
   applyTheme();
   updateLogsBadge();
+  updateFeedbackBadge();
   renderNavBadge();
 
   if (currentNav === 'users') {
     document.getElementById('usersView').style.display = 'flex';
     document.getElementById('logsView').style.display = 'none';
+    document.getElementById('feedbackView').style.display = 'none';
     document.getElementById('titleActionsUsers').style.display = 'flex';
     document.getElementById('titleActionsLogs').style.display = 'none';
+    document.getElementById('titleActionsFeedback').style.display = 'none';
     document.getElementById('mainTitle').textContent = 'Пользователи';
     document.getElementById('breadcrumbCurrent').textContent = 'Пользователи';
     renderStats();
     renderUsers();
     renderPagination();
     renderActiveFilter();
-  } else {
+  } else if (currentNav === 'logs') {
     document.getElementById('usersView').style.display = 'none';
     document.getElementById('logsView').style.display = 'flex';
+    document.getElementById('feedbackView').style.display = 'none';
     document.getElementById('titleActionsUsers').style.display = 'none';
     document.getElementById('titleActionsLogs').style.display = 'flex';
+    document.getElementById('titleActionsFeedback').style.display = 'none';
     document.getElementById('mainTitle').textContent = 'Логи';
     document.getElementById('breadcrumbCurrent').textContent = 'Логи';
     renderLogsStats();
     renderLogs();
     renderLogsPagination();
     renderLogsActiveFilter();
+  } else {
+    document.getElementById('usersView').style.display = 'none';
+    document.getElementById('logsView').style.display = 'none';
+    document.getElementById('feedbackView').style.display = 'flex';
+    document.getElementById('titleActionsUsers').style.display = 'none';
+    document.getElementById('titleActionsLogs').style.display = 'none';
+    document.getElementById('titleActionsFeedback').style.display = 'flex';
+    document.getElementById('mainTitle').textContent = 'Обратная связь';
+    document.getElementById('breadcrumbCurrent').textContent = 'Обратная связь';
+    renderFeedbackStats();
+    renderFeedback();
+    renderFeedbackPagination();
+    renderFeedbackActiveFilter();
   }
 }
 
@@ -532,6 +565,168 @@ function renderLogsPagination() {
   el.innerHTML = info + prevBtn + numBtns + nextBtn;
 }
 
+/* Отрисовка обратной связи */
+function computeFeedbackStats() {
+  const total = feedbacks.length;
+  const unread = feedbacks.filter(f => !f.read).length;
+  const read = total - unread;
+  return { total, unread, read };
+}
+
+function getFilteredFeedback() {
+  let list = [...feedbacks];
+  if (feedbackFilter === 'unread') list = list.filter(f => !f.read);
+  else if (feedbackFilter === 'read') list = list.filter(f => f.read);
+
+  if (feedbackSearch.trim()) {
+    const q = feedbackSearch.trim().toLowerCase();
+    list = list.filter(f =>
+      (f.userName || '').toLowerCase().includes(q) ||
+      (f.text || '').toLowerCase().includes(q)
+    );
+  }
+  return list;
+}
+
+function getFeedbackPageSlice() {
+  const all = getFilteredFeedback();
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (feedbackPage > totalPages) feedbackPage = totalPages;
+  if (feedbackPage < 1) feedbackPage = 1;
+  const start = (feedbackPage - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  return { all, total, totalPages, start, end, pageItems: all.slice(start, end) };
+}
+
+function renderFeedbackStats() {
+  const el = document.getElementById('feedbackStats');
+  const s = computeFeedbackStats();
+
+  const iconAll = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+  const iconUnread = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+  const iconRead = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+
+  const pluralMsgs = (n) => plural(n, 'сообщение', 'сообщения', 'сообщений');
+  const cls = (key) => `stat-card${feedbackFilter === key ? ' primary' : ''}`;
+
+  el.innerHTML = `
+    <button class="${cls('all')}" type="button" data-feedback-filter="all">
+      <div class="stat-card-icon">${iconAll}</div>
+      <div class="stat-card-value">${s.total}<span class="unit">${pluralMsgs(s.total)}</span></div>
+      <div class="stat-card-label">Всего</div>
+    </button>
+    <button class="${cls('unread')}" type="button" data-feedback-filter="unread">
+      <div class="stat-card-icon">${iconUnread}</div>
+      <div class="stat-card-value">${s.unread}<span class="unit">непрочитанных</span></div>
+      <div class="stat-card-label">Непрочитанные</div>
+    </button>
+    <button class="${cls('read')}" type="button" data-feedback-filter="read">
+      <div class="stat-card-icon">${iconRead}</div>
+      <div class="stat-card-value">${s.read}<span class="unit">прочитанных</span></div>
+      <div class="stat-card-label">Прочитанные</div>
+    </button>
+  `;
+
+  el.querySelectorAll('.stat-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      feedbackFilter = btn.getAttribute('data-feedback-filter');
+      feedbackPage = 1;
+      renderFeedbackStats();
+      renderFeedback();
+      renderFeedbackPagination();
+      renderFeedbackActiveFilter();
+    });
+  });
+}
+
+function renderFeedbackActiveFilter() {
+  const el = document.getElementById('feedbackActiveFilter');
+  if (!el) return;
+  if (feedbackFilter === 'all') { el.innerHTML = ''; return; }
+  const labels = { unread: 'непрочитанные', read: 'прочитанные' };
+  el.innerHTML = `Фильтр: <b>${labels[feedbackFilter] || ''}</b>`;
+}
+
+function renderFeedback() {
+  const container = document.getElementById('feedbackList');
+  const { pageItems, total } = getFeedbackPageSlice();
+
+  document.getElementById('titleCount').innerHTML =
+    `<span class="num">${total}</span><span>${plural(total, 'сообщение', 'сообщения', 'сообщений')}</span>`;
+
+  const clearBtn = document.getElementById('feedbackSearchClear');
+  if (clearBtn) clearBtn.hidden = !feedbackSearch;
+
+  if (!pageItems.length) {
+    const hasFilter = feedbackFilter !== 'all' || feedbackSearch.trim();
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+        </div>
+        <h3>${hasFilter ? 'Ничего не найдено' : 'Сообщений пока нет'}</h3>
+        <p>${hasFilter ? 'Сбросьте фильтр или измените запрос.' : 'Здесь появятся сообщения от пользователей Wordbook.'}</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = pageItems.map(f => {
+    const initial = (String(f.userName || '?').trim()[0] || '?').toUpperCase();
+    const unreadCls = f.read ? '' : ' unread';
+    return `
+      <div class="feedback-row${unreadCls}" data-id="${escapeHtml(f.id)}">
+        <div class="user-cell-main">
+          <div class="user-avatar-sm">${escapeHtml(initial)}</div>
+          <div class="user-cell-name">
+            <div class="n" style="font-size:15px;">${escapeHtml(f.userName || '—')}</div>
+          </div>
+        </div>
+        <div class="feedback-time">
+          <span class="date-part">${formatDate(f.ts)}</span>
+          <span class="time-part">${formatTime(f.ts)}</span>
+        </div>
+        <div class="feedback-text" data-expand="${escapeHtml(f.id)}">${escapeHtml(f.text || '')}</div>
+        <div class="feedback-actions">
+          ${f.read ? '' : `
+          <button class="admin-action" type="button" data-action="mark-read" data-id="${escapeHtml(f.id)}" title="Отметить прочитанным">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </button>
+          `}
+          <button class="admin-action danger" type="button" data-action="delete-feedback" data-id="${escapeHtml(f.id)}" title="Удалить">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderFeedbackPagination() {
+  const el = document.getElementById('feedbackPagination');
+  const { total, totalPages, start, end } = getFeedbackPageSlice();
+  if (totalPages <= 1) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+
+  const cur = feedbackPage;
+  const nums = getPageNumbers(cur, totalPages);
+  const info = `<span class="page-info">Показано <b>${start + 1}–${Math.min(end, total)}</b> из <b>${total}</b></span>`;
+  const prevBtn = `<button class="page-btn nav" type="button" data-fpage="prev" ${cur === 1 ? 'disabled' : ''} title="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>`;
+  const nextBtn = `<button class="page-btn nav" type="button" data-fpage="next" ${cur === totalPages ? 'disabled' : ''} title="Вперёд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+  const numBtns = nums.map(n => {
+    if (n === '...') return `<span class="page-dots">…</span>`;
+    return `<button class="page-btn ${n === cur ? 'active' : ''}" type="button" data-fpage="${n}">${n}</button>`;
+  }).join('');
+  el.innerHTML = info + prevBtn + numBtns + nextBtn;
+}
+
 /* События: пользователи */
 document.getElementById('usersList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
@@ -714,6 +909,88 @@ document.getElementById('clearLogsBtn').addEventListener('click', async (e) => {
   });
 });
 
+/* События: обратная связь */
+document.getElementById('feedbackList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (btn) {
+    e.stopPropagation();
+    const id = btn.getAttribute('data-id');
+    const action = btn.getAttribute('data-action');
+    const item = feedbacks.find(f => f.id === id);
+    if (!item) return;
+
+    if (action === 'mark-read') {
+      await withLoading(btn, async () => {
+        const ok = await fbMarkFeedbackRead(id, true);
+        if (!ok) { showToast('Не удалось обновить', 'error'); return; }
+        item.read = true;
+        render();
+      });
+      return;
+    }
+
+    if (action === 'delete-feedback') {
+      const ok = await showConfirm(
+        `Сообщение от «${item.userName}» будет удалено безвозвратно.`,
+        'Удалить сообщение?', 'Удалить'
+      );
+      if (!ok) return;
+      await withLoading(btn, async () => {
+        const deleted = await fbDeleteFeedback(id);
+        if (!deleted) { showToast('Не удалось удалить', 'error'); return; }
+        feedbacks = feedbacks.filter(f => f.id !== id);
+        const { totalPages } = getFeedbackPageSlice();
+        if (feedbackPage > totalPages) feedbackPage = totalPages;
+        render();
+      });
+    }
+    return;
+  }
+
+  const textEl = e.target.closest('[data-expand]');
+  if (textEl) {
+    textEl.closest('.feedback-row').classList.toggle('expanded');
+  }
+});
+
+document.getElementById('feedbackPagination').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-fpage]');
+  if (!btn || btn.disabled) return;
+  const val = btn.getAttribute('data-fpage');
+  const totalPages = getFeedbackPageSlice().totalPages;
+
+  if (val === 'prev') feedbackPage = Math.max(1, feedbackPage - 1);
+  else if (val === 'next') feedbackPage = Math.min(totalPages, feedbackPage + 1);
+  else feedbackPage = Math.max(1, Math.min(totalPages, parseInt(val, 10)));
+
+  renderFeedback();
+  renderFeedbackPagination();
+  const wrap = document.getElementById('feedbackList');
+  if (wrap) wrap.scrollTop = 0;
+});
+
+document.getElementById('feedbackSearchInput').addEventListener('input', (e) => {
+  feedbackSearch = e.target.value;
+  feedbackPage = 1;
+  renderFeedback();
+  renderFeedbackPagination();
+});
+
+document.getElementById('feedbackSearchClear').addEventListener('click', () => {
+  feedbackSearch = '';
+  document.getElementById('feedbackSearchInput').value = '';
+  feedbackPage = 1;
+  renderFeedback();
+  renderFeedbackPagination();
+});
+
+document.getElementById('refreshFeedbackBtn').addEventListener('click', async (e) => {
+  await withLoading(e.currentTarget, async () => {
+    await loadFeedback();
+    render();
+  });
+});
+
 /* Навигация */
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
@@ -843,6 +1120,7 @@ async function initApp() {
   if (label) label.textContent = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 
   await loadLogs();
+  await loadFeedback();
 
   render();
 }

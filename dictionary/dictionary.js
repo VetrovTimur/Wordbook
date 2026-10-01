@@ -764,6 +764,8 @@ document.addEventListener('keydown', (e) => {
     }
     const impModal = document.getElementById('importModal');
     if (impModal && impModal.classList.contains('show')) closeImportModal();
+    const fbModal = document.getElementById('feedbackModal');
+    if (fbModal && fbModal.classList.contains('show')) closeFeedbackModal();
   }
 });
 
@@ -1389,6 +1391,96 @@ if (dropzone) {
 }
 
 document.getElementById('importConfirm').addEventListener('click', executeImport);
+
+/* ============================================================
+   ОБРАТНАЯ СВЯЗЬ
+   ============================================================ */
+
+const FEEDBACK_MAX = 2000;
+
+const feedbackModal = document.getElementById('feedbackModal');
+const feedbackText = document.getElementById('feedbackText');
+const feedbackErr = document.getElementById('feedbackErr');
+const feedbackCounter = document.getElementById('feedbackCounter');
+const feedbackSendBtn = document.getElementById('feedbackSend');
+
+function openFeedbackModal() {
+  feedbackText.value = '';
+  feedbackText.classList.remove('error');
+  feedbackErr.textContent = '';
+  feedbackSendBtn.disabled = false;
+  feedbackSendBtn.textContent = 'Отправить';
+  updateFeedbackCounter();
+  feedbackModal.classList.add('show');
+  setTimeout(() => feedbackText.focus(), 80);
+}
+
+function closeFeedbackModal() {
+  feedbackModal.classList.remove('show');
+}
+
+function updateFeedbackCounter() {
+  const len = feedbackText.value.length;
+  feedbackCounter.textContent = `${len} / ${FEEDBACK_MAX}`;
+  feedbackCounter.classList.toggle('warn', len > FEEDBACK_MAX * 0.9);
+}
+
+feedbackText.addEventListener('input', () => {
+  if (feedbackText.classList.contains('error')) {
+    feedbackText.classList.remove('error');
+    feedbackErr.textContent = '';
+  }
+  updateFeedbackCounter();
+});
+
+feedbackText.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendFeedback();
+  }
+});
+
+async function sendFeedback() {
+  const text = feedbackText.value.trim();
+
+  if (!text) {
+    feedbackText.classList.add('error');
+    feedbackErr.textContent = 'Введите сообщение';
+    feedbackText.focus();
+    return;
+  }
+  if (text.length > FEEDBACK_MAX) {
+    feedbackText.classList.add('error');
+    feedbackErr.textContent = `Максимум ${FEEDBACK_MAX} символов`;
+    feedbackText.focus();
+    return;
+  }
+
+  feedbackSendBtn.disabled = true;
+  feedbackSendBtn.textContent = 'Отправляю...';
+
+  const ok = await fbAddFeedback(currentUserName, text);
+
+  if (ok) {
+    closeFeedbackModal();
+    showToast('Сообщение отправлено. Спасибо!', 'info', 3500);
+  } else {
+    feedbackErr.textContent = 'Не удалось отправить. Попробуйте позже.';
+    feedbackSendBtn.disabled = false;
+    feedbackSendBtn.textContent = 'Отправить';
+  }
+}
+
+document.getElementById('menuFeedback').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  openFeedbackModal();
+});
+document.getElementById('feedbackCancel').addEventListener('click', closeFeedbackModal);
+document.getElementById('feedbackSend').addEventListener('click', sendFeedback);
+feedbackModal.addEventListener('click', (e) => {
+  if (e.target === feedbackModal) closeFeedbackModal();
+});
 
 /* Инициализация */
 async function initApp() {

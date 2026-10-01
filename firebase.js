@@ -286,3 +286,48 @@ async function fbClearLogs() {
     { writeTimeout: FB_WRITE_TIMEOUT_MS }
   );
 }
+
+/* Обратная связь */
+async function fbAddFeedback(userName, text) {
+  return fbFetch(
+    () => db.collection('feedback').add({
+      userName,
+      text,
+      ts: Date.now(),
+      read: false,
+    }).then(() => true),
+    'Не удалось отправить сообщение',
+    false,
+    { writeTimeout: FB_WRITE_TIMEOUT_MS }
+  );
+}
+
+async function fbGetAllFeedback(limit = 500) {
+  return fbFetch(
+    () => db.collection('feedback').orderBy('ts', 'desc').limit(limit).get().then(snap => {
+      const list = [];
+      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      return list;
+    }),
+    'Не удалось загрузить сообщения',
+    []
+  );
+}
+
+async function fbMarkFeedbackRead(id, read = true) {
+  return fbFetch(
+    () => db.collection('feedback').doc(id).update({ read }).then(() => true),
+    'Не удалось обновить сообщение',
+    false,
+    { silent: true, writeTimeout: FB_WRITE_TIMEOUT_MS }
+  );
+}
+
+async function fbDeleteFeedback(id) {
+  return fbFetch(
+    () => db.collection('feedback').doc(id).delete().then(() => true),
+    'Не удалось удалить сообщение',
+    false,
+    { writeTimeout: FB_WRITE_TIMEOUT_MS }
+  );
+}
