@@ -495,7 +495,8 @@ body.view-stats .pagination,
 body.view-stats #addWordBtn { display: none !important; }
 
 /* Таблица слов */
-.word-list { flex: 1; overflow: auto; padding: 0 0 12px; position: relative; }
+.words-scroll { flex: 1; overflow: auto; min-height: 0; padding: 0; position: relative; }
+.word-list { padding: 0 0 12px; }
 .head-row, .word-row {
   display: grid;
   grid-template-columns: minmax(160px, 1.4fr) minmax(140px, 1fr) minmax(160px, 1.4fr) 76px;
@@ -813,7 +814,14 @@ body.view-stats #addWordBtn { display: none !important; }
   .title-count .num { font-size: 12px; }
   .main-title-row { gap: 12px; align-items: center; }
   .btn-primary, .btn-back { padding: 9px 14px; font-size: 11px; letter-spacing: 1.2px; gap: 6px; }
-  .head-row { display: none; }
+  .head-row {
+    grid-template-columns: minmax(120px, 1.4fr) minmax(110px, 1fr) minmax(120px, 1.4fr) 68px;
+    padding: 12px 16px 10px;
+    gap: 10px;
+    min-width: 464px;
+    font-size: 10px;
+    letter-spacing: 1.6px;
+  }
   .word-row {
     grid-template-columns: minmax(120px, 1.4fr) minmax(110px, 1fr) minmax(120px, 1.4fr) 68px;
     padding: 12px 16px; gap: 10px; min-width: 464px;
