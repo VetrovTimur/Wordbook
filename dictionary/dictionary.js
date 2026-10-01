@@ -322,8 +322,14 @@ function render() {
   renderPagination();
 
   const addBtn = document.getElementById('addWordBtn');
-  if (!state.sections.length) { addBtn.disabled = true; addBtn.title = 'Сначала создайте раздел'; }
-  else { addBtn.disabled = false; addBtn.title = ''; }
+  const importBtn = document.getElementById('importWordsBtn');
+  if (!state.sections.length) {
+    addBtn.disabled = true; addBtn.title = 'Сначала создайте раздел';
+    if (importBtn) { importBtn.disabled = true; importBtn.title = 'Сначала создайте раздел'; }
+  } else {
+    addBtn.disabled = false; addBtn.title = '';
+    if (importBtn) { importBtn.disabled = false; importBtn.title = ''; }
+  }
 
   updateMenuActive();
 }
@@ -756,6 +762,8 @@ document.addEventListener('keydown', (e) => {
       trModal.classList.remove('show');
       try { localStorage.setItem(TR_HINT_KEY_PREFIX + currentUserName, '1'); } catch (err) {}
     }
+    const impModal = document.getElementById('importModal');
+    if (impModal && impModal.classList.contains('show')) closeImportModal();
   }
 });
 
@@ -974,6 +982,413 @@ saveWordBtn.addEventListener('click', handleSaveWord);
     if (e.key === 'Enter') { e.preventDefault(); handleSaveWord(); }
   });
 });
+
+/* ============================================================
+   ИМПОРТ СЛОВ (paste + xlsx/csv)
+   ============================================================ */
+
+const IMPORT_MAX = 100;
+const IMPORT_PREVIEW_ROWS = 5;
+const IMPORT_CHUNK = 20;
+
+let importPending = null;
+let importTab = 'paste';
+
+/* ---------- Парсинг ---------- */
+
+function detectDelimiter(line) {
+  if (line.includes('\t')) return '\t';
+  const semis = (line.match(/;/g) || []).length;
+  const commas = (line.match(/,/g) || []).length;
+  if (semis > commas && semis > 0) return ';';
+  if (commas > 0) return ',';
+  return '\t';
+}
+
+function parseCSVLine(line, delim) {
+  if (delim === '\t') return line.split('\t');
+  const parts = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === delim && !inQuotes) {
+      parts.push(cur); cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  parts.push(cur);
+  return parts;
+}
+
+const HEADER_WORDS = [
+  'english', 'английский', 'en', 'слово', 'word',
+  'transcription', 'транскрипция', 'tr', 'перевод', 'russian', 'ru',
+];
+
+function isHeaderRow(parts) {
+  const first = String(parts[0] || '').toLowerCase().trim();
+  if (!first) return false;
+  return HEADER_WORDS.includes(first);
+}
+
+function parseRows2D(matrix) {
+  const rows = [];
+  let errors = 0;
+  let headerChecked = false;
+
+  for (let i = 0; i < matrix.length; i++) {
+    const raw = matrix[i];
+    if (!raw) continue;
+    const parts = raw.map(p => String(p == null ? '' : p).trim());
+    if (!parts.length) continue;
+    if (parts.every(p => !p)) continue;
+
+    if (!headerChecked) {
+      headerChecked = true;
+      if (isHeaderRow(parts)) continue;
+    }
+
+    const en = (parts[0] || '').trim();
+    const tr = (parts[1] || '').trim();
+    const ru = (parts[2] || '').trim();
+
+    if (!en || !ru) { errors++; continue; }
+    rows.push({ en, tr, ru });
+  }
+  return { rows, errors };
+}
+
+function parseImportText(text) {
+  const lines = String(text || '').split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return { rows: [], errors: 0 };
+  const delim = detectDelimiter(lines[0]);
+  const matrix = lines.map(l => parseCSVLine(l, delim));
+  return parseRows2D(matrix);
+}
+
+/* ---------- Lazy-load SheetJS с фолбэком ---------- */
+
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.onload = () => resolve(true);
+    s.onerror = () => reject(new Error('load fail: ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+async function loadSheetJS() {
+  if (window.XLSX) return true;
+  const cdns = [
+    'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+  ];
+  for (const url of cdns) {
+    try {
+      await loadScript(url);
+      if (window.XLSX) return true;
+    } catch (e) { /* пробуем следующий */ }
+  }
+  throw new Error('Не удалось загрузить библиотеку XLSX');
+}
+
+async function parseXlsxFile(file) {
+  await loadSheetJS();
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data, { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  return parseRows2D(matrix);
+}
+
+async function parseCsvFile(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let text = new TextDecoder('utf-8').decode(bytes);
+  if (text.includes('\uFFFD')) {
+    try { text = new TextDecoder('windows-1251').decode(bytes); } catch (e) {}
+  }
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  return parseImportText(text);
+}
+
+/* ---------- Модалка ---------- */
+
+function renderImportSectionSelect() {
+  const sel = document.getElementById('importSection');
+  if (!sel) return;
+  sel.innerHTML = state.sections.map(s =>
+    `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`
+  ).join('');
+  if (state.sections.some(s => s.id === state.activeSectionId)) {
+    sel.value = state.activeSectionId;
+  }
+}
+
+function resetImportModal() {
+  importPending = null;
+  importTab = 'paste';
+  const tabs = document.querySelectorAll('.import-tab');
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === 'paste'));
+  const pp = document.getElementById('importPanelPaste');
+  const pf = document.getElementById('importPanelFile');
+  if (pp) pp.hidden = false;
+  if (pf) pf.hidden = true;
+  const ta = document.getElementById('importTextarea');
+  if (ta) ta.value = '';
+  const fi = document.getElementById('importFileInput');
+  if (fi) fi.value = '';
+  const fn = document.getElementById('importFileName');
+  if (fn) fn.textContent = '';
+  const preview = document.getElementById('importPreview');
+  if (preview) { preview.hidden = true; preview.innerHTML = ''; }
+  const prog = document.getElementById('importProgress');
+  if (prog) prog.hidden = true;
+  const fill = prog && prog.querySelector('.import-progress-fill');
+  if (fill) fill.style.width = '0%';
+  const pt = prog && prog.querySelector('.import-progress-text');
+  if (pt) pt.textContent = '';
+  const cancelBtn = document.getElementById('importCancel');
+  if (cancelBtn) cancelBtn.disabled = false;
+  updateImportConfirmState();
+}
+
+function openImportModal() {
+  if (!state.sections.length) {
+    showToast('Сначала создайте раздел', 'warning');
+    return;
+  }
+  resetImportModal();
+  renderImportSectionSelect();
+  document.getElementById('importModal').classList.add('show');
+  setTimeout(() => {
+    const ta = document.getElementById('importTextarea');
+    if (ta) ta.focus();
+  }, 80);
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('show');
+  resetImportModal();
+}
+
+/* ---------- Превью ---------- */
+
+function updateImportPreview() {
+  const el = document.getElementById('importPreview');
+  if (!el) return;
+
+  if (!importPending || (!importPending.rows.length && !importPending.errors)) {
+    el.hidden = true; el.innerHTML = '';
+    updateImportConfirmState();
+    return;
+  }
+
+  const existing = new Set(state.words.map(w => String(w.en).toLowerCase().trim()));
+  const seen = new Set();
+  const unique = [];
+  let dupes = 0;
+  for (const r of importPending.rows) {
+    const key = r.en.toLowerCase().trim();
+    if (existing.has(key) || seen.has(key)) { dupes++; continue; }
+    seen.add(key);
+    unique.push(r);
+  }
+  importPending.uniqueRows = unique;
+  importPending.dupes = dupes;
+
+  const overLimit = unique.length > IMPORT_MAX;
+  const shown = unique.slice(0, IMPORT_PREVIEW_ROWS);
+
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="import-stats">
+      <div class="import-stat">
+        <span class="import-stat-label">Готово</span>
+        <span class="import-stat-value">${unique.length}</span>
+      </div>
+      <div class="import-stat">
+        <span class="import-stat-label">Дубли</span>
+        <span class="import-stat-value">${dupes}</span>
+      </div>
+      <div class="import-stat">
+        <span class="import-stat-label">Ошибки</span>
+        <span class="import-stat-value">${importPending.errors}</span>
+      </div>
+    </div>
+    ${overLimit ? `<div class="import-warning">Слишком много слов: ${unique.length}. Максимум за раз — ${IMPORT_MAX}.</div>` : ''}
+    ${shown.length ? `
+      <div class="import-preview-title">Предпросмотр</div>
+      <div class="import-preview-table">
+        ${shown.map(r => `
+          <div class="import-preview-row">
+            <span class="ip-en">${escapeHtml(r.en)}</span>
+            <span class="ip-tr">${r.tr ? escapeHtml(r.tr) : '—'}</span>
+            <span class="ip-ru">${escapeHtml(r.ru)}</span>
+          </div>
+        `).join('')}
+        ${unique.length > IMPORT_PREVIEW_ROWS
+          ? `<div class="import-preview-more">…и ещё ${unique.length - IMPORT_PREVIEW_ROWS}</div>`
+          : ''}
+      </div>
+    ` : ''}
+  `;
+
+  updateImportConfirmState();
+}
+
+function updateImportConfirmState() {
+  const btn = document.getElementById('importConfirm');
+  if (!btn) return;
+  if (!importPending || !importPending.uniqueRows || !importPending.uniqueRows.length) {
+    btn.disabled = true;
+    btn.textContent = 'Импортировать';
+    return;
+  }
+  const n = importPending.uniqueRows.length;
+  if (n > IMPORT_MAX) {
+    btn.disabled = true;
+    btn.textContent = `Слишком много (${n})`;
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = `Импортировать ${n}`;
+}
+
+/* ---------- Выполнение импорта ---------- */
+
+async function executeImport() {
+  if (!importPending || !importPending.uniqueRows || !importPending.uniqueRows.length) return;
+  const rows = importPending.uniqueRows.slice(0, IMPORT_MAX);
+  const sectionId = document.getElementById('importSection').value;
+  if (!sectionId) return;
+
+  const prog = document.getElementById('importProgress');
+  const fill = prog.querySelector('.import-progress-fill');
+  const text = prog.querySelector('.import-progress-text');
+  const confirmBtn = document.getElementById('importConfirm');
+  const cancelBtn = document.getElementById('importCancel');
+
+  prog.hidden = false;
+  confirmBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  const total = rows.length;
+
+  for (let i = 0; i < total; i++) {
+    const r = rows[i];
+    state.words.push({ id: uid(), sectionId, en: r.en, tr: r.tr, ru: r.ru });
+    const done = i + 1;
+    const pct = Math.round((done / total) * 100);
+    fill.style.width = pct + '%';
+    text.textContent = `Импортирую… ${done} из ${total}`;
+    if (done % IMPORT_CHUNK === 0) {
+      await new Promise(res => setTimeout(res, 0));
+    }
+  }
+
+  fill.style.width = '100%';
+  text.textContent = `Готово: ${total}`;
+
+  shuffledOrder = [];
+  state.currentPage = 1;
+  state.view = 'dictionary';
+  state.activeSectionId = sectionId;
+  saveState();
+  render();
+
+  const parts = [`Импортировано: ${total}`];
+  if (importPending.dupes) parts.push(`дубли: ${importPending.dupes}`);
+  if (importPending.errors) parts.push(`ошибки формата: ${importPending.errors}`);
+  const type = total > 0 ? 'info' : 'warning';
+  showToast(parts.join(' · '), type, 5000);
+
+  setTimeout(closeImportModal, 500);
+}
+
+/* ---------- Обработчики ---------- */
+
+document.getElementById('importWordsBtn').addEventListener('click', openImportModal);
+document.getElementById('importCancel').addEventListener('click', closeImportModal);
+document.getElementById('importModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('importModal')) closeImportModal();
+});
+
+document.querySelectorAll('.import-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    importTab = tab.dataset.tab;
+    document.querySelectorAll('.import-tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.tab === importTab)
+    );
+    document.getElementById('importPanelPaste').hidden = importTab !== 'paste';
+    document.getElementById('importPanelFile').hidden = importTab !== 'file';
+  });
+});
+
+document.getElementById('importTextarea').addEventListener('input', (e) => {
+  const { rows, errors } = parseImportText(e.target.value);
+  importPending = { rows, errors };
+  updateImportPreview();
+});
+
+document.getElementById('importFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById('importFileName');
+  nameEl.textContent = file.name;
+
+  try {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    let result;
+    if (ext === 'xlsx' || ext === 'xls') {
+      result = await parseXlsxFile(file);
+    } else if (ext === 'csv') {
+      result = await parseCsvFile(file);
+    } else {
+      showToast('Поддерживаются .xlsx, .xls, .csv', 'warning');
+      return;
+    }
+    importPending = result;
+    updateImportPreview();
+  } catch (err) {
+    console.error('[Import]', err);
+    showToast('Не удалось прочитать файл', 'error');
+  }
+});
+
+const dropzone = document.getElementById('importDropzone');
+if (dropzone) {
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+    });
+  });
+  dropzone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const input = document.getElementById('importFileInput');
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
+  });
+}
+
+document.getElementById('importConfirm').addEventListener('click', executeImport);
 
 /* Инициализация */
 async function initApp() {

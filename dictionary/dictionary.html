@@ -111,6 +111,14 @@
                     </svg>
                     Словарь
                 </button>
+                <button class="btn-secondary" id="importWordsBtn" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Импорт
+                </button>
                 <button class="btn-primary" id="addWordBtn" type="button">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
                     Добавить слово
@@ -198,6 +206,52 @@
             <button class="btn-primary" type="button" id="trHintOk">Понятно</button>
             </div>
         </div>
+        </div>
+
+        <div class="modal-overlay" id="importModal">
+            <div class="modal modal-lg">
+                <h2>Импорт слов</h2>
+
+                <div class="import-tabs">
+                    <button class="import-tab active" type="button" data-tab="paste">Вставить список</button>
+                    <button class="import-tab" type="button" data-tab="file">Загрузить файл</button>
+                </div>
+
+                <div class="import-panel" id="importPanelPaste">
+                    <textarea id="importTextarea" spellcheck="false"
+                        placeholder="hello&#9;/həˈloʊ/&#9;привет&#10;banana&#9;/bəˈnɑːnə/&#9;банан&#10;&#10;Скопируйте из Excel или вставьте вручную. Колонки: слово, транскрипция (необязательно), перевод. Заголовок — по желанию."></textarea>
+                </div>
+
+                <div class="import-panel" id="importPanelFile" hidden>
+                    <label class="import-dropzone" id="importDropzone">
+                        <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <div>Нажмите или перетащите файл<br><small>.xlsx, .xls или .csv</small></div>
+                        <div class="import-file-name" id="importFileName"></div>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="importSection">Раздел</label>
+                    <select id="importSection"></select>
+                </div>
+
+                <div class="import-preview" id="importPreview" hidden></div>
+
+                <div class="import-progress" id="importProgress" hidden>
+                    <div class="import-progress-bar"><div class="import-progress-fill"></div></div>
+                    <div class="import-progress-text"></div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-ghost" type="button" id="importCancel">Отмена</button>
+                    <button class="btn-primary" type="button" id="importConfirm" disabled>Импортировать</button>
+                </div>
+            </div>
         </div>
 
         <!-- Firebase SDK (compat) -->
