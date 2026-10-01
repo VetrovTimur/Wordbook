@@ -2,7 +2,7 @@ const CURRENT_USER_KEY = 'wordbook_current_user';
 const PAGE_SIZE = 15;
 const CAL_DAYS_BEFORE = 10;
 const CAL_DAYS_AFTER = 10;
-const PRELOADER_MIN_TIME = 2000;
+const PRELOADER_MIN_TIME = 1000;
 
 const defaultState = {
   theme: 'light',
@@ -17,9 +17,6 @@ const defaultState = {
   words: [],
 };
 
-/* ============================================================
-   Кто залогинен + локальные ссылки
-   ============================================================ */
 let currentUserName = null;
 let currentUserData = null;
 let state = JSON.parse(JSON.stringify(defaultState));
@@ -30,6 +27,8 @@ let editingWordId = null;
 let lastAddedWordId = null;
 let highlightTimer = null;
 let saveDebounceTimer = null;
+let trFetchTimer = null;
+let trAutoFilled = false;
 
 function getCurrentUser() {
   try { return localStorage.getItem(CURRENT_USER_KEY); } catch (e) { return null; }
@@ -38,7 +37,7 @@ function clearCurrentUser() {
   try { localStorage.removeItem(CURRENT_USER_KEY); } catch (e) {}
 }
 
-/* saveState: сразу кэш в localStorage, а в Firestore — с дебаунсом 400мс */
+/* Сохранение с дебаунсом */
 function saveState() {
   if (!currentUserName) return;
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
@@ -47,9 +46,7 @@ function saveState() {
   }, 400);
 }
 
-/* ============================================================
-   Утилиты (без изменений)
-   ============================================================ */
+/* Утилиты */
 function toISO(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -145,9 +142,7 @@ function getPageSlice() {
   return { all, total, totalPages, start, end, pageWords: all.slice(start, end) };
 }
 
-/* ============================================================
-   Статистика
-   ============================================================ */
+/* Статистика */
 function computeStats() {
   const today = new Date(); today.setHours(0,0,0,0);
   const uniq = [...new Set(state.visits)].sort();
@@ -375,11 +370,6 @@ function renderUserMenu() {
     if (adminDivider) adminDivider.remove();
   }
 
-  // Скрыть "Сменить имя" — эта функция пока не работает с Firestore
-  const renameBtn = document.getElementById('menuRename');
-  if (renameBtn) renameBtn.style.display = 'none';
-
-  // Переименовать "Сбросить имя" → "Выйти"
   const logoutBtn = document.getElementById('menuLogout');
   if (logoutBtn) {
     const label = logoutBtn.querySelector('span');
@@ -809,8 +799,61 @@ function resetErrors() {
   inEn.classList.remove('error'); inRu.classList.remove('error');
   errEn.textContent = ''; errRu.textContent = '';
 }
+
+async function fetchTranscription(word) {
+  const w = word.trim().toLowerCase();
+  if (w.length < 2) return null;
+
+  const target = 'https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w);
+
+  const proxies = [
+    'https://api.codetabs.com/v1/proxy?quest=' + target,
+    'https://cors.eu.org/' + target,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(target),
+  ];
+
+  for (const url of proxies) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2500);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!Array.isArray(data) || !data.length) continue;
+      for (const entry of data) {
+        if (entry.phonetic) return entry.phonetic;
+        if (Array.isArray(entry.phonetics)) {
+          for (const p of entry.phonetics) {
+            if (p.text) return p.text;
+          }
+        }
+      }
+    } catch (e) {
+      continue;   // тихо пропускаем — консоль чистая
+    }
+  }
+  return null;
+}
+
+function scheduleTranscriptionFetch() {
+  if (trFetchTimer) clearTimeout(trFetchTimer);
+  trFetchTimer = setTimeout(async () => {
+    const en = inEn.value.trim();
+    if (!en) return;
+    if (inTr.value.trim() && !trAutoFilled) return;
+    const tr = await fetchTranscription(en);
+    if (tr && (!inTr.value.trim() || trAutoFilled)) {
+      inTr.value = tr;
+      trAutoFilled = true;
+    }
+  }, 600);
+}
+
 function openAddWordModal() {
   if (!state.sections.length) return;
+  if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  trAutoFilled = false;
   editingWordId = null;
   modalTitle.textContent = 'Новое слово';
   saveWordBtn.textContent = 'Добавить';
@@ -822,6 +865,8 @@ function openAddWordModal() {
 function openEditWordModal(wordId) {
   const w = state.words.find(x => x.id === wordId);
   if (!w) return;
+  if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  trAutoFilled = false;
   editingWordId = wordId;
   modalTitle.textContent = 'Редактировать';
   saveWordBtn.textContent = 'Сохранить';
@@ -834,6 +879,8 @@ function openEditWordModal(wordId) {
 function closeWordModal() {
   wordModal.classList.remove('show');
   editingWordId = null;
+  if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  trAutoFilled = false;
 }
 document.getElementById('addWordBtn').addEventListener('click', openAddWordModal);
 document.getElementById('cancelWord').addEventListener('click', closeWordModal);
@@ -846,11 +893,15 @@ inEn.addEventListener('input', () => {
   const cleaned = inEn.value.replace(EN_RE, '');
   if (cleaned !== inEn.value) inEn.value = cleaned;
   if (cleaned.trim()) { errEn.textContent = ''; inEn.classList.remove('error'); }
+  scheduleTranscriptionFetch();
 });
 inRu.addEventListener('input', () => {
   const cleaned = inRu.value.replace(RU_RE, '');
   if (cleaned !== inRu.value) inRu.value = cleaned;
   if (cleaned.trim()) { errRu.textContent = ''; inRu.classList.remove('error'); }
+});
+inTr.addEventListener('input', () => {
+  trAutoFilled = false;
 });
 
 function handleSaveWord() {
@@ -900,18 +951,14 @@ saveWordBtn.addEventListener('click', handleSaveWord);
   });
 });
 
-/* ============================================================
-   INIT + PRELOADER (теперь async, с Firestore)
-   ============================================================ */
+/* Инициализация */
 async function initApp() {
-  // 1. Кто залогинен
   currentUserName = getCurrentUser();
   if (!currentUserName) {
     window.location.href = '../index.html';
     return;
   }
 
-  // 2. Загрузить юзера из Firestore
   const user = await fbGetUser(currentUserName);
   if (!user || user.blocked) {
     clearCurrentUser();
@@ -920,7 +967,6 @@ async function initApp() {
   }
   currentUserData = user;
 
-  // 3. Загрузить state из Firestore
   let cloudState = await fbLoadState(currentUserName);
   if (!cloudState) {
     cloudState = {
@@ -940,10 +986,8 @@ async function initApp() {
   state = { ...defaultState, ...cloudState };
   if (!state.userName) state.userName = currentUserName;
 
-  // 4. Тема сразу
   document.body.setAttribute('data-theme', state.theme);
 
-  // 5. Отрисовать
   markTodayVisited();
   render();
   renderUserMenu();

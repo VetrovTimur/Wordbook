@@ -2,7 +2,7 @@ const CURRENT_USER_KEY = 'wordbook_current_user';
 const ADMIN_THEME_KEY = 'wordbook_admin_theme';
 const PAGE_SIZE = 15;
 const LOG_PAGE_SIZE = 20;
-const PRELOADER_MIN_TIME = 2000;
+const PRELOADER_MIN_TIME = 1000;
 
 let users = [];
 let logs = [];
@@ -16,9 +16,7 @@ let logSearch = '';
 let logFilter = 'all';
 let logPage = 1;
 
-/* ============================================================
-   Theme
-   ============================================================ */
+/* Тема */
 function loadTheme() {
   try { return localStorage.getItem(ADMIN_THEME_KEY) || 'light'; } catch (e) { return 'light'; }
 }
@@ -31,17 +29,9 @@ function applyTheme() {
   if (label) label.textContent = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 }
 
-/* ============================================================
-   Logs (теперь через Firestore)
-   ============================================================ */
+/* Логи */
 async function loadLogs() {
   logs = await fbGetLogs(500);
-}
-
-async function clearLogsCloud() {
-  await fbClearLogs();
-  logs = [];
-  updateLogsBadge();
 }
 
 const LOG_TYPES = {
@@ -77,14 +67,12 @@ function updateLogsBadge() {
   if (badge) badge.textContent = logs.length;
 }
 
-/* ============================================================
-   Users (теперь через Firestore)
-   ============================================================ */
+/* Пользователи */
 async function loadUsers() {
   const list = await fbGetAllUsers();
   users = list.map(u => ({
     id: u.id || u.name,
-    name: u.name || u.id || 'Без имени',    
+    name: u.name || u.id || 'Без имени',
     passHash: u.passHash || '',
     role: u.role || 'user',
     blocked: !!u.blocked,
@@ -93,9 +81,7 @@ async function loadUsers() {
   users.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-/* ============================================================
-   Utils
-   ============================================================ */
+/* Утилиты */
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -116,10 +102,21 @@ function formatTime(ts) {
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
+async function withLoading(btn, asyncFn) {
+  if (!btn) return asyncFn();
+  if (btn.classList.contains('is-loading')) return;
+  const wasDisabled = btn.disabled;
+  btn.classList.add('is-loading');
+  btn.disabled = true;
+  try {
+    return await asyncFn();
+  } finally {
+    btn.classList.remove('is-loading');
+    if (!wasDisabled) btn.disabled = false;
+  }
+}
 
-/* ============================================================
-   Users stats / filter / pagination
-   ============================================================ */
+/* Статистика и пагинация пользователей */
 function computeStats() {
   const total = users.length;
   const active = users.filter(u => !u.blocked).length;
@@ -155,9 +152,7 @@ function getPageSlice() {
   return { all, total, totalPages, start, end, pageItems: all.slice(start, end) };
 }
 
-/* ============================================================
-   Logs stats / filter / pagination
-   ============================================================ */
+/* Статистика и пагинация логов */
 function computeLogStats() {
   const total = logs.length;
   const blocks = logs.filter(l => l.type === 'block' || l.type === 'unblock').length;
@@ -193,9 +188,7 @@ function getLogPageSlice() {
   return { all, total, totalPages, start, end, pageItems: all.slice(start, end) };
 }
 
-/* ============================================================
-   Render root
-   ============================================================ */
+/* Отрисовка */
 function render() {
   applyTheme();
   updateLogsBadge();
@@ -231,9 +224,7 @@ function renderNavBadge() {
   if (badge) badge.textContent = users.length;
 }
 
-/* ============================================================
-   Render — users
-   ============================================================ */
+/* Отрисовка пользователей */
 function renderStats() {
   const el = document.getElementById('adminStats');
   const s = computeStats();
@@ -323,6 +314,7 @@ function renderUsers() {
     const roleClass = u.role === 'admin' ? 'admin' : '';
     const blockedClass = u.blocked ? 'blocked' : '';
     const statusLabel = u.blocked ? 'Заблокирован' : 'Активен';
+    const isAdmin = u.role === 'admin';
 
     return `
       <div class="user-row" data-id="${escapeHtml(u.name)}">
@@ -360,16 +352,20 @@ function renderUsers() {
               <circle cx="12" cy="12" r="3"/>
             </svg>
           </button>
+          ${isAdmin ? '' : `
           <button class="admin-action" type="button" data-action="toggle-block" data-name="${escapeHtml(u.name)}" title="${u.blocked ? 'Разблокировать' : 'Заблокировать'}">
             ${u.blocked
               ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`
               : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`}
           </button>
+          `}
+          ${isAdmin ? '' : `
           <button class="admin-action danger" type="button" data-action="delete" data-name="${escapeHtml(u.name)}" title="Удалить">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
             </svg>
           </button>
+          `}
         </div>
       </div>
     `;
@@ -408,9 +404,7 @@ function getPageNumbers(current, total) {
   return pages;
 }
 
-/* ============================================================
-   Render — logs
-   ============================================================ */
+/* Отрисовка логов */
 function renderLogsStats() {
   const el = document.getElementById('logsStats');
   const s = computeLogStats();
@@ -538,43 +532,66 @@ function renderLogsPagination() {
   el.innerHTML = info + prevBtn + numBtns + nextBtn;
 }
 
-/* ============================================================
-   Users events
-   ============================================================ */
+/* События: пользователи */
 document.getElementById('usersList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
+  if (btn.disabled || btn.classList.contains('is-loading')) return;
+
   const action = btn.getAttribute('data-action');
   const name = btn.getAttribute('data-name');
   const user = users.find(u => u.name === name);
   if (!user) return;
+  if (user.role === 'admin' && action !== 'view') return;
 
   if (action === 'view') {
     openUserModal(user);
-  } else if (action === 'toggle-block') {
-    const newBlocked = !user.blocked;
-    user.blocked = newBlocked;
-    await fbUpdateUser(user.name, { blocked: newBlocked });
-    await fbAddLog(
-      newBlocked ? 'block' : 'unblock',
-      user.name,
-      newBlocked ? 'Пользователь заблокирован' : 'Пользователь разблокирован'
-    );
-    await loadLogs();
-    render();
-  } else if (action === 'delete') {
+    return;
+  }
+
+  if (action === 'toggle-block') {
+    await withLoading(btn, async () => {
+      const newBlocked = !user.blocked;
+      const ok = await fbUpdateUser(user.name, { blocked: newBlocked });
+
+      if (!ok) {
+        showToast('Не удалось обновить пользователя', 'error');
+        return;
+      }
+
+      user.blocked = newBlocked;
+
+      await fbAddLog(
+        newBlocked ? 'block' : 'unblock',
+        user.name,
+        newBlocked ? 'Пользователь заблокирован' : 'Пользователь разблокирован'
+      );
+      await loadLogs();
+      render();
+    });
+    return;
+  }
+
+  if (action === 'delete') {
     const ok = await showConfirm(
       `Пользователь «${user.name}» будет удалён. Это действие нельзя отменить.`,
       'Удалить пользователя?', 'Удалить'
     );
     if (!ok) return;
-    await fbDeleteUser(user.name);
-    await fbAddLog('delete', user.name, `Пользователь удалён (ID: ${user.id || user.name})`);
-    await loadUsers();
-    await loadLogs();
-    const { totalPages } = getPageSlice();
-    if (currentPage > totalPages) currentPage = totalPages;
-    render();
+
+    await withLoading(btn, async () => {
+      const deleted = await fbDeleteUser(user.name);
+      if (!deleted) {
+        showToast('Не удалось удалить пользователя', 'error');
+        return;
+      }
+      await fbAddLog('delete', user.name, `Пользователь удалён (ID: ${user.id || user.name})`);
+      await loadUsers();
+      await loadLogs();
+      const { totalPages } = getPageSlice();
+      if (currentPage > totalPages) currentPage = totalPages;
+      render();
+    });
   }
 });
 
@@ -608,38 +625,44 @@ document.getElementById('searchClear').addEventListener('click', () => {
   renderPagination();
 });
 
-document.getElementById('refreshBtn').addEventListener('click', async () => {
-  await loadUsers();
-  render();
+document.getElementById('refreshBtn').addEventListener('click', async (e) => {
+  await withLoading(e.currentTarget, async () => {
+    await loadUsers();
+    render();
+  });
 });
 
-document.getElementById('exportBtn').addEventListener('click', async () => {
-  const data = users.map(u => ({
-    id: u.id,
-    name: u.name,
-    role: u.role,
-    blocked: u.blocked,
-    createdAt: u.createdAt,
-    registeredAt: formatDate(u.createdAt) + (u.createdAt ? ' ' + formatTime(u.createdAt) : ''),
-  }));
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `wordbook-users-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+document.getElementById('exportBtn').addEventListener('click', async (e) => {
+  await withLoading(e.currentTarget, async () => {
+    const data = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      blocked: u.blocked,
+      createdAt: u.createdAt,
+      registeredAt: formatDate(u.createdAt) + (u.createdAt ? ' ' + formatTime(u.createdAt) : ''),
+    }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wordbook-users-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
-  await fbAddLog('export', 'Система', `Экспортировано ${data.length} пользователей в JSON`);
-  await loadLogs();
-  render();
+    showToast(`Экспортировано ${data.length} пользователей`, 'info', 3000);
+
+    if (navigator.onLine !== false) {
+      await fbAddLog('export', 'Система', `Экспортировано ${data.length} пользователей в JSON`);
+      await loadLogs();
+      render();
+    }
+  });
 });
 
-/* ============================================================
-   Logs events
-   ============================================================ */
+/* События: логи */
 document.getElementById('logsPagination').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-lpage]');
   if (!btn || btn.disabled) return;
@@ -670,26 +693,28 @@ document.getElementById('logSearchClear').addEventListener('click', () => {
   renderLogsPagination();
 });
 
-document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
-  await loadLogs();
-  render();
+document.getElementById('refreshLogsBtn').addEventListener('click', async (e) => {
+  await withLoading(e.currentTarget, async () => {
+    await loadLogs();
+    render();
+  });
 });
 
-document.getElementById('clearLogsBtn').addEventListener('click', async () => {
+document.getElementById('clearLogsBtn').addEventListener('click', async (e) => {
   const ok = await showConfirm(
     'Все записи журнала будут удалены. Отменить это действие нельзя.',
     'Очистить логи?', 'Очистить'
   );
   if (!ok) return;
-  await fbClearLogs();
-  await fbAddLog('clearLogs', 'Система', 'Журнал очищен вручную');
-  await loadLogs();
-  render();
+  await withLoading(e.currentTarget, async () => {
+    await fbClearLogs();
+    await fbAddLog('clearLogs', 'Система', 'Журнал очищен вручную');
+    await loadLogs();
+    render();
+  });
 });
 
-/* ============================================================
-   Nav
-   ============================================================ */
+/* Навигация */
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -699,18 +724,14 @@ document.querySelectorAll('.nav-item').forEach(item => {
   });
 });
 
-/* ============================================================
-   Theme
-   ============================================================ */
+/* Тема */
 document.getElementById('themeToggle').addEventListener('click', () => {
   theme = theme === 'light' ? 'dark' : 'light';
   saveTheme(theme);
   applyTheme();
 });
 
-/* ============================================================
-   Modal
-   ============================================================ */
+/* Модалки */
 let confirmResolver = null;
 const confirmModal = document.getElementById('confirmModal');
 function showConfirm(text, title = 'Подтвердите', okText = 'Удалить') {
@@ -749,9 +770,7 @@ function openUserModal(user) {
 document.getElementById('userModalClose').addEventListener('click', () => userModal.classList.remove('show'));
 userModal.addEventListener('click', (e) => { if (e.target === userModal) userModal.classList.remove('show'); });
 
-/* ============================================================
-   User dropdown
-   ============================================================ */
+/* Дропдаун пользователя */
 function openUserDropdown() {
   document.getElementById('userCard').classList.add('open');
   document.getElementById('userCard').setAttribute('aria-expanded', 'true');
@@ -778,9 +797,13 @@ document.getElementById('menuBackToApp').addEventListener('click', (e) => {
   window.location.href = '../dictionary/dictionary.html';
 });
 
-/* ============================================================
-   Escape
-   ============================================================ */
+document.getElementById('menuAdminLogout').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  try { await firebase.auth().signOut(); } catch (err) {}
+  window.location.href = '../index.html';
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeUserDropdown();
@@ -788,37 +811,37 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* ============================================================
-   INIT + PRELOADER
-   ============================================================ */
+/* Инициализация */
 async function initApp() {
-  // 1. Кто залогинен?
-  let name = null;
-  try { name = localStorage.getItem(CURRENT_USER_KEY); } catch (e) {}
+  const auth = firebase.auth();
 
-  if (!name) {
+  await new Promise(resolve => {
+    const unsub = auth.onAuthStateChanged(() => { unsub(); resolve(); });
+  });
+
+  if (!auth.currentUser) {
     window.location.href = '../index.html';
     return;
   }
 
-  // 2. Проверяем пользователя в Firestore
-  const user = await fbGetUser(name);
-  if (!user || user.blocked || user.role !== 'admin') {
-    window.location.href = '../index.html';
-    return;
-  }
-  currentUserData = user;
+  await loadUsers();
 
-  // 3. Обновляем шапку
-  document.getElementById('adminName').textContent = user.name;
-  document.getElementById('adminInitial').textContent = (user.name[0] || 'A').toUpperCase();
+  const adminUser = users.find(u => u.role === 'admin');
+  const adminName = adminUser ? adminUser.name : (auth.currentUser.email || 'admin').split('@')[0];
+
+  currentUserData = {
+    name: adminName,
+    email: auth.currentUser.email,
+    role: 'admin',
+  };
+
+  document.getElementById('adminName').textContent = currentUserData.name;
+  document.getElementById('adminInitial').textContent = (currentUserData.name[0] || 'A').toUpperCase();
 
   document.body.setAttribute('data-theme', theme);
   const label = document.getElementById('themeLabel');
   if (label) label.textContent = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 
-  // 4. Загружаем данные
-  await loadUsers();
   await loadLogs();
 
   render();

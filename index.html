@@ -8,7 +8,6 @@
     </head>
     <body>
 
-        <!-- ============ AUTH SCREEN ============ -->
         <div class="auth-screen" id="authScreen">
             <button class="auth-theme-toggle" id="authThemeToggle" type="button" title="Переключить тему" aria-label="Переключить тему">
                 <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -30,7 +29,6 @@
                 <form class="auth-form" id="authForm" autocomplete="off" novalidate>
                     <h2 class="auth-heading" id="authHeading">Вход в словарь</h2>
 
-                    <!-- Баннер блокировки -->
                     <div class="auth-blocked-banner" id="authBlockedBanner">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
@@ -43,7 +41,7 @@
                     </div>
 
                     <div class="auth-field">
-                        <label for="authName">Имя</label>
+                        <label for="authName" id="authNameLabel">Имя</label>
                         <input type="text" id="authName" autocomplete="username" spellcheck="false">
                         <div class="auth-err" id="authNameErr"></div>
                     </div>
@@ -62,22 +60,23 @@
 
                     <button class="auth-submit" type="submit" id="authSubmit">Войти</button>
 
-                    <div class="auth-switch">
+                    <div class="auth-switch" id="authUserSwitchWrap">
                         <span id="authSwitchText">Нет записи?</span>
                         <button type="button" id="authSwitch">Создать</button>
+                    </div>
+
+                    <div class="auth-switch" id="authAdminSwitchWrap">
+                        <button type="button" id="authAdminSwitch">Вход для администратора</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- Firebase SDK (compat) -->
         <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
         <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
-        <!-- Наш конфиг Firebase -->
         <script src="firebase.js"></script>
-
-        <!-- Логика входа -->
         <script src="app.js"></script>
     </body>
 </html>

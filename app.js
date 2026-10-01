@@ -1,6 +1,4 @@
-/* ============================================================
-   THEME
-   ============================================================ */
+/* Тема */
 const AUTH_THEME_KEY = 'wordbook_auth_theme';
 
 function loadTheme() {
@@ -15,9 +13,7 @@ let theme = loadTheme();
 function applyTheme() {
   document.body.setAttribute('data-theme', theme);
   const authBtn = document.getElementById('authThemeToggle');
-  if (authBtn) {
-    authBtn.title = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
-  }
+  if (authBtn) authBtn.title = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 }
 
 function toggleTheme() {
@@ -26,9 +22,7 @@ function toggleTheme() {
   applyTheme();
 }
 
-/* ============================================================
-   CURRENT USER (кто залогинен) — только имя в localStorage
-   ============================================================ */
+/* Текущий пользователь (localStorage) */
 const CURRENT_USER_KEY = 'wordbook_current_user';
 
 function getCurrentUser() {
@@ -41,10 +35,9 @@ function clearCurrentUser() {
   try { localStorage.removeItem(CURRENT_USER_KEY); } catch (e) {}
 }
 
-/* ============================================================
-   UI helpers
-   ============================================================ */
+/* UI-состояние */
 let authMode = 'login';
+let authRole = 'user';
 
 function clearAuthErrors() {
   ['authNameErr','authPassErr','authConfirmErr'].forEach(id => {
@@ -84,9 +77,45 @@ function setAuthMode(mode) {
   document.getElementById('authConfirm').value = '';
 }
 
-/* ============================================================
-   Обработка submit
-   ============================================================ */
+function setAuthRole(role) {
+  authRole = role;
+  const heading = document.getElementById('authHeading');
+  const submit = document.getElementById('authSubmit');
+  const userWrap = document.getElementById('authUserSwitchWrap');
+  const adminWrap = document.getElementById('authAdminSwitchWrap');
+  const adminBtn = document.getElementById('authAdminSwitch');
+  const nameLabel = document.getElementById('authNameLabel');
+  const nameInput = document.getElementById('authName');
+  const confirmField = document.getElementById('authConfirmField');
+
+  if (role === 'admin') {
+    heading.textContent = 'Вход для администратора';
+    submit.textContent = 'Войти';
+    userWrap.style.display = 'none';
+    adminWrap.style.display = '';
+    adminBtn.textContent = 'Обычный вход';
+    nameLabel.textContent = 'Email';
+    nameInput.type = 'email';
+    nameInput.placeholder = 'admin@wordbook.local';
+    nameInput.value = '';
+    document.getElementById('authPass').value = '';
+    confirmField.hidden = true;
+    clearAuthErrors();
+  } else {
+    userWrap.style.display = '';
+    adminWrap.style.display = '';
+    adminBtn.textContent = 'Вход для администратора';
+    nameLabel.textContent = 'Имя';
+    nameInput.type = 'text';
+    nameInput.placeholder = '';
+    nameInput.value = '';
+    document.getElementById('authPass').value = '';
+    clearAuthErrors();
+    setAuthMode(authMode);
+  }
+}
+
+/* Обработка submit */
 async function authSubmitHandler(e) {
   e.preventDefault();
   clearAuthErrors();
@@ -98,7 +127,7 @@ async function authSubmitHandler(e) {
   let hasError = false;
 
   if (!name) {
-    document.getElementById('authNameErr').textContent = 'Введите имя';
+    document.getElementById('authNameErr').textContent = authRole === 'admin' ? 'Введите email' : 'Введите имя';
     document.getElementById('authName').classList.add('error');
     hasError = true;
   }
@@ -107,7 +136,7 @@ async function authSubmitHandler(e) {
     document.getElementById('authPass').classList.add('error');
     hasError = true;
   }
-  if (authMode === 'register' && pass && confirm !== pass) {
+  if (authRole === 'user' && authMode === 'register' && pass && confirm !== pass) {
     document.getElementById('authConfirmErr').textContent = 'Пароли не совпадают';
     document.getElementById('authConfirm').classList.add('error');
     hasError = true;
@@ -117,10 +146,12 @@ async function authSubmitHandler(e) {
   const submitBtn = document.getElementById('authSubmit');
   submitBtn.disabled = true;
   const origText = submitBtn.textContent;
-  submitBtn.textContent = authMode === 'register' ? 'Создаю...' : 'Проверяю...';
+  submitBtn.textContent = 'Проверяю...';
 
   try {
-    if (authMode === 'register') {
+    if (authRole === 'admin') {
+      await handleAdminLogin(name, pass);
+    } else if (authMode === 'register') {
       await handleRegister(name, pass);
     } else {
       await handleLogin(name, pass);
@@ -131,8 +162,29 @@ async function authSubmitHandler(e) {
   }
 }
 
+/* Админ: Firebase Auth */
+async function handleAdminLogin(email, password) {
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+    window.location.href = 'adminPage/adminPage.html';
+  } catch (e) {
+    const errEl = document.getElementById('authPassErr');
+    if (e.code === 'auth/user-not-found' ||
+        e.code === 'auth/wrong-password' ||
+        e.code === 'auth/invalid-credential') {
+      errEl.textContent = 'Неверный email или пароль';
+    } else if (e.code === 'auth/invalid-email') {
+      errEl.textContent = 'Некорректный email';
+    } else {
+      errEl.textContent = 'Ошибка входа: ' + e.code;
+    }
+    document.getElementById('authName').classList.add('error');
+    document.getElementById('authPass').classList.add('error');
+  }
+}
+
+/* Пользователь: localStorage */
 async function handleRegister(name, pass) {
-  // Не занято ли имя
   const existing = await fbGetUser(name);
   if (existing) {
     document.getElementById('authNameErr').textContent = 'Такое имя уже занято';
@@ -140,14 +192,13 @@ async function handleRegister(name, pass) {
     return;
   }
 
-  const passHash = fbSimpleHash(pass);
+  const passHash = await fbHashPassword(name, pass);
   const ok = await fbCreateUser(name, passHash, 'user');
   if (!ok) {
     document.getElementById('authNameErr').textContent = 'Не удалось создать аккаунт. Попробуйте позже.';
     return;
   }
 
-  // Создаём пустой state для нового пользователя
   await fbSaveState(name, {
     theme: 'light',
     activeSectionId: 'all',
@@ -160,14 +211,21 @@ async function handleRegister(name, pass) {
   });
 
   setCurrentUser(name);
-  redirectByRole('user');
+  window.location.href = 'dictionary/dictionary.html';
 }
 
 async function handleLogin(name, pass) {
   const user = await fbGetUser(name);
-  const passHash = fbSimpleHash(pass);
 
-  if (!user || user.passHash !== passHash) {
+  if (!user) {
+    document.getElementById('authPassErr').textContent = 'Неверное имя или пароль';
+    document.getElementById('authName').classList.add('error');
+    document.getElementById('authPass').classList.add('error');
+    return;
+  }
+
+  const hash = await fbHashPassword(name, pass);
+  if (user.passHash !== hash) {
     document.getElementById('authPassErr').textContent = 'Неверное имя или пароль';
     document.getElementById('authName').classList.add('error');
     document.getElementById('authPass').classList.add('error');
@@ -186,38 +244,23 @@ async function handleLogin(name, pass) {
   }
 
   setCurrentUser(user.name);
-  redirectByRole(user.role);
-}
-
-function redirectByRole(role) {
-  if (role === 'admin') {
+  if (user.role === 'admin') {
     window.location.href = 'adminPage/adminPage.html';
   } else {
     window.location.href = 'dictionary/dictionary.html';
   }
 }
 
-/* ============================================================
-   INIT
-   ============================================================ */
+/* Инициализация */
 async function init() {
   applyTheme();
-
-  // Уже залогинен? Проверим и редиректнём
-  const currentName = getCurrentUser();
-  if (currentName) {
-    const user = await fbGetUser(currentName);
-    if (user && !user.blocked) {
-      redirectByRole(user.role);
-      return;
-    } else {
-      clearCurrentUser();
-    }
-  }
 
   document.getElementById('authForm').addEventListener('submit', authSubmitHandler);
   document.getElementById('authSwitch').addEventListener('click', () => {
     setAuthMode(authMode === 'login' ? 'register' : 'login');
+  });
+  document.getElementById('authAdminSwitch').addEventListener('click', () => {
+    setAuthRole(authRole === 'admin' ? 'user' : 'admin');
   });
   document.getElementById('authThemeToggle').addEventListener('click', toggleTheme);
 
@@ -248,7 +291,7 @@ async function init() {
     });
   });
 
-  setAuthMode('login');
+  setAuthRole('user');
   setTimeout(() => {
     const n = document.getElementById('authName');
     if (n) n.focus();
