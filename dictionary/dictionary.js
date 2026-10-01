@@ -4,6 +4,9 @@ const CAL_DAYS_BEFORE = 10;
 const CAL_DAYS_AFTER = 10;
 const PRELOADER_MIN_TIME = 1000;
 
+const WORKER_URL = 'https://wordbook.timurworkvetrov.workers.dev/';
+const TR_HINT_KEY_PREFIX = 'wordbook_tr_hint_shown_';
+
 const defaultState = {
   theme: 'light',
   view: 'dictionary',
@@ -644,6 +647,30 @@ document.getElementById('confirmOk').addEventListener('click', () => resolveConf
 document.getElementById('confirmCancel').addEventListener('click', () => resolveConfirm(false));
 confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) resolveConfirm(false); });
 
+/* Подсказка про медленную транскрипцию */
+function showTrHintIfNeeded() {
+  if (!currentUserName) return;
+  const key = TR_HINT_KEY_PREFIX + currentUserName;
+  let shown = null;
+  try { shown = localStorage.getItem(key); } catch (e) {}
+  if (shown) return;
+
+  const modal = document.getElementById('trHintModal');
+  if (!modal) return;
+
+  modal.classList.add('show');
+
+  const close = () => {
+    modal.classList.remove('show');
+    try { localStorage.setItem(key, '1'); } catch (e) {}
+  };
+
+  document.getElementById('trHintOk').addEventListener('click', close, { once: true });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) close();
+  }, { once: true });
+}
+
 document.querySelector('.sidebar').addEventListener('click', async (e) => {
   const delBtn = e.target.closest('[data-delete-section]');
   if (delBtn) {
@@ -724,6 +751,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeUserDropdown();
     if (wordModal.classList.contains('show')) closeWordModal();
+    const trModal = document.getElementById('trHintModal');
+    if (trModal && trModal.classList.contains('show')) {
+      trModal.classList.remove('show');
+      try { localStorage.setItem(TR_HINT_KEY_PREFIX + currentUserName, '1'); } catch (err) {}
+    }
   }
 });
 
@@ -804,36 +836,28 @@ async function fetchTranscription(word) {
   const w = word.trim().toLowerCase();
   if (w.length < 2) return null;
 
-  const target = 'https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w);
+  const url = WORKER_URL + '?word=' + encodeURIComponent(w);
 
-  const proxies = [
-    'https://api.codetabs.com/v1/proxy?quest=' + target,
-    'https://cors.eu.org/' + target,
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(target),
-  ];
-
-  for (const url of proxies) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 2500);
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (!Array.isArray(data) || !data.length) continue;
-      for (const entry of data) {
-        if (entry.phonetic) return entry.phonetic;
-        if (Array.isArray(entry.phonetics)) {
-          for (const p of entry.phonetics) {
-            if (p.text) return p.text;
-          }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    for (const entry of data) {
+      if (entry.phonetic) return entry.phonetic;
+      if (Array.isArray(entry.phonetics)) {
+        for (const p of entry.phonetics) {
+          if (p.text) return p.text;
         }
       }
-    } catch (e) {
-      continue;   // тихо пропускаем — консоль чистая
     }
+    return null;
+  } catch (e) {
+    return null;
   }
-  return null;
 }
 
 function scheduleTranscriptionFetch() {
@@ -989,8 +1013,15 @@ async function initApp() {
   document.body.setAttribute('data-theme', state.theme);
 
   markTodayVisited();
+
+  /* Прогрев воркера — чтобы транскрипция грузилась быстрее */
+  fetch(WORKER_URL + '?word=hello').catch(() => {});
+
   render();
   renderUserMenu();
+
+  /* Показать подсказку после прелоадера, один раз */
+  setTimeout(showTrHintIfNeeded, PRELOADER_MIN_TIME + 100);
 }
 
 function hidePreloader() {
