@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wordbook-v13';
+const CACHE_VERSION = 'wordbook-v14';
 
 const STATIC_ASSETS = [
   './',
