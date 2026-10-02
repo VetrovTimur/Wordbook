@@ -226,15 +226,28 @@ function getPageSlice() {
 /* Статистика */
 function computeStats() {
   const today = new Date(); today.setHours(0,0,0,0);
-  const uniq = [...new Set(state.visits)].sort();
-  const set = new Set(uniq);
 
+  /* Собираем все ISO-даты, где либо был заход, либо есть запись прогресса */
+  const allDates = new Set();
+  (Array.isArray(state.visits) ? state.visits : []).forEach(v => allDates.add(v));
+  if (state.dailyProgress && typeof state.dailyProgress === 'object') {
+    Object.keys(state.dailyProgress).forEach(k => allDates.add(k));
+  }
+  const uniq = [...allDates].sort();
+
+  /* Текущая серия: идём назад от сегодня, пока дни засчитаны */
   let streak = 0;
   let cur = new Date(today);
-  while (set.has(toISO(cur))) { streak++; cur.setDate(cur.getDate() - 1); if (streak > 3650) break; }
+  while (isDayVisited(toISO(cur))) {
+    streak++;
+    cur.setDate(cur.getDate() - 1);
+    if (streak > 3650) break;
+  }
 
+  /* Лучшая серия: по всем датам по возрастанию, сбрасываем при незасчитанном дне */
   let bestStreak = 0, run = 0, prevDate = null;
   for (const iso of uniq) {
+    if (!isDayVisited(iso)) { run = 0; prevDate = null; continue; }
     const d = new Date(iso + 'T00:00:00');
     if (prevDate && (d - prevDate) === 86400000) run++;
     else run = 1;
@@ -242,25 +255,34 @@ function computeStats() {
     prevDate = d;
   }
 
+  /* С нами: от первой даты до сегодня */
   let daysWithUs = 0;
   if (uniq.length) {
     const first = new Date(uniq[0] + 'T00:00:00');
     daysWithUs = Math.floor((today - first) / 86400000) + 1;
   }
 
+  /* Пропущено: между первой датой и вчера — все незасчитанные */
   let missed = 0;
   if (uniq.length) {
     const first = new Date(uniq[0] + 'T00:00:00');
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
     let d = new Date(first);
-    while (d <= yesterday) { if (!set.has(toISO(d))) missed++; d.setDate(d.getDate() + 1); }
+    while (d <= yesterday) {
+      if (!isDayVisited(toISO(d))) missed++;
+      d.setDate(d.getDate() + 1);
+    }
   }
+
+  /* Всего заходов: количество засчитанных дней */
+  let totalVisits = 0;
+  for (const iso of uniq) if (isDayVisited(iso)) totalVisits++;
 
   const wordsCount = state.words.length;
   const sectionsCount = state.sections.length;
   const avgWordsPerSection = sectionsCount > 0 ? (wordsCount / sectionsCount) : 0;
 
-  return { streak, bestStreak, totalVisits: uniq.length, daysWithUs, missed, wordsCount, sectionsCount, avgWordsPerSection };
+  return { streak, bestStreak, totalVisits, daysWithUs, missed, wordsCount, sectionsCount, avgWordsPerSection };
 }
 
 function renderStats() {
