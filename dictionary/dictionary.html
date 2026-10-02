@@ -64,6 +64,14 @@
                 </svg>
                 <span>Словарь</span>
                 </button>
+                <button class="dropdown-item" id="menuGoal" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="6"/>
+                        <circle cx="12" cy="12" r="2"/>
+                    </svg>
+                    <span>Цель дня</span>
+                </button>
                 <button class="dropdown-item" id="menuStats" type="button" role="menuitem">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="20" x2="18" y2="10"/>
@@ -323,6 +331,10 @@
                         <input type="checkbox" id="goalShow">
                         <span>Показывать счётчик</span>
                     </label>
+                </div>
+                <div class="goal-modal-hint" id="goalModalHint" hidden>
+                    Новая цель начнёт действовать со следующего дня.
+                    Сегодняшний день считается по текущей цели.
                 </div>
                 <div class="form-group" id="goalCountGroup">
                     <label for="goalCount">Сколько слов в день?</label>

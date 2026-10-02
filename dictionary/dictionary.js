@@ -2124,6 +2124,11 @@ function openGoalModal() {
   goalShow.checked = goal > 0;
   goalCount.value = goal > 0 ? goal : 5;
   goalCountGroup.hidden = !goalShow.checked;
+
+  /* Подсказку про «с завтрашнего дня» показываем только если счётчик уже был включён */
+  const hint = document.getElementById('goalModalHint');
+  if (hint) hint.hidden = !(goal > 0);
+
   goalModal.classList.add('show');
   if (goalShow.checked) {
     setTimeout(() => goalCount.focus(), 80);
@@ -2146,35 +2151,45 @@ function saveGoal() {
   }
 
   const oldGoal = state.dailyGoal || 0;
+  if (newGoal === oldGoal) { closeGoalModal(); return; }
+
   state.dailyGoal = newGoal;
 
   const today = getTodayISO();
-  if (state.dailyProgress && state.dailyProgress[today]) {
-    if (newGoal > 0) {
-      state.dailyProgress[today].goal = newGoal;
-    } else {
-      /* Выключили счётчик — убираем запись за сегодня */
-      delete state.dailyProgress[today];
-    }
+  if (!state.dailyProgress) state.dailyProgress = {};
+
+  if (newGoal === 0) {
+    /* Выключили — убираем запись за сегодня (день считается по заходу) */
+    delete state.dailyProgress[today];
+  } else if (oldGoal === 0) {
+    /* Включили с нуля — применяем сегодня же */
+    const rec = state.dailyProgress[today];
+    state.dailyProgress[today] = { added: rec ? rec.added : 0, goal: newGoal };
   }
+  /* Если счётчик уже был включён и число меняется — применяется со следующего дня.
+     Сегодняшняя запись сохраняет старую цель. */
 
   saveState();
   closeGoalModal();
   render();
 
   /* Уведомление */
-  if (newGoal !== oldGoal) {
-    if (newGoal === 0) {
-      showToast('Счётчик цели отключён', 'info', 3000);
-    } else {
-      const w = plural(newGoal, 'слово', 'слова', 'слов');
-      showToast(oldGoal === 0
-        ? `Цель дня: ${newGoal} ${w}`
-        : `Цель изменена на ${newGoal} ${w}`, 'info', 3000);
-    }
+  if (newGoal === 0) {
+    showToast('Счётчик цели отключён', 'info', 3000);
+  } else if (oldGoal === 0) {
+    const w = plural(newGoal, 'слово', 'слова', 'слов');
+    showToast(`Цель дня: ${newGoal} ${w}`, 'info', 3000);
+  } else {
+    const w = plural(newGoal, 'слово', 'слова', 'слов');
+    showToast(`Цель изменена на ${newGoal} ${w} — начнёт действовать с завтрашнего дня`, 'info', 3500);
   }
 }
 
+document.getElementById('menuGoal').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  openGoalModal();
+});
 document.getElementById('goalCard').addEventListener('click', openGoalModal);
 document.getElementById('goalCancel').addEventListener('click', closeGoalModal);
 document.getElementById('goalSave').addEventListener('click', saveGoal);

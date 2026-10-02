@@ -1480,3 +1480,17 @@ body.view-stats #exportWordsBtn { display: none !important; }
   .day--today-pending .dow { font-size: 8.5px; }
   .day--today-pending .dn { font-size: 15px; }
 }
+
+.goal-modal-hint {
+  font-size: 12px;
+  color: var(--gold);
+  font-style: italic;
+  background: rgba(176, 141, 87, 0.1);
+  border-left: 2px solid var(--gold);
+  padding: 8px 12px;
+  border-radius: 2px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+  margin-top: -14px;
+}
+.goal-modal-hint[hidden] { display: none; }
