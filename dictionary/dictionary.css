@@ -1247,8 +1247,7 @@ body.view-stats #exportWordsBtn { display: none !important; }
 .import-preview-group {
   border: 1px solid var(--border-soft);
   border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 4px;
+  /* overflow: hidden убран — он резал контент и портил рендер */
 }
 
 .import-preview-group-header {
@@ -1259,6 +1258,9 @@ body.view-stats #exportWordsBtn { display: none !important; }
   padding: 6px 10px;
   background: var(--paper-2);
   border-bottom: 1px solid var(--border-soft);
+  /* Скругление сверху, чтобы фон не вылезал за угол рамки */
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
 }
 .import-preview-group-title {
   font-size: 12px;
@@ -1295,6 +1297,9 @@ body.view-stats #exportWordsBtn { display: none !important; }
 .import-preview-group-body {
   padding: 4px 8px;
   background: var(--paper);
+  /* Скругление снизу */
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
 }
 .import-preview-group .import-preview-row {
   background: transparent;
