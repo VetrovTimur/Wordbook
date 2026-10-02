@@ -779,6 +779,8 @@ document.addEventListener('keydown', (e) => {
     if (fbModal && fbModal.classList.contains('show')) closeFeedbackModal();
     const wnModal = document.getElementById('whatsNewModal');
     if (wnModal && wnModal.classList.contains('show')) closeWhatsNewModal();
+    const pwdModal = document.getElementById('passwordModal');
+    if (pwdModal && pwdModal.classList.contains('show')) closePasswordModal();
   }
 });
 
@@ -1753,3 +1755,137 @@ if (document.readyState === 'loading') {
 } else {
   startPreloader();
 }
+
+/* ============================================================
+   СМЕНА ПАРОЛЯ
+   ============================================================ */
+
+const PASSWORD_MIN = 6;
+
+const passwordModal = document.getElementById('passwordModal');
+const passwordCurrent = document.getElementById('passwordCurrent');
+const passwordNew = document.getElementById('passwordNew');
+const passwordConfirm = document.getElementById('passwordConfirm');
+const passwordErrCurrent = document.getElementById('passwordErrCurrent');
+const passwordErrNew = document.getElementById('passwordErrNew');
+const passwordErrConfirm = document.getElementById('passwordErrConfirm');
+const passwordSaveBtn = document.getElementById('passwordSave');
+
+function resetPasswordErrors() {
+  [passwordCurrent, passwordNew, passwordConfirm].forEach(el => el.classList.remove('error'));
+  [passwordErrCurrent, passwordErrNew, passwordErrConfirm].forEach(el => el.textContent = '');
+}
+
+function openPasswordModal() {
+  passwordCurrent.value = '';
+  passwordNew.value = '';
+  passwordConfirm.value = '';
+  resetPasswordErrors();
+  passwordSaveBtn.disabled = false;
+  passwordSaveBtn.textContent = 'Сохранить';
+  passwordModal.classList.add('show');
+  setTimeout(() => passwordCurrent.focus(), 80);
+}
+
+function closePasswordModal() {
+  passwordModal.classList.remove('show');
+}
+
+async function changePassword() {
+  resetPasswordErrors();
+
+  const cur = passwordCurrent.value;
+  const nw = passwordNew.value;
+  const cf = passwordConfirm.value;
+
+  let hasError = false;
+
+  if (!cur) {
+    passwordErrCurrent.textContent = 'Введите текущий пароль';
+    passwordCurrent.classList.add('error');
+    hasError = true;
+  }
+  if (!nw) {
+    passwordErrNew.textContent = 'Введите новый пароль';
+    passwordNew.classList.add('error');
+    hasError = true;
+  } else if (nw.length < PASSWORD_MIN) {
+    passwordErrNew.textContent = `Минимум ${PASSWORD_MIN} символов`;
+    passwordNew.classList.add('error');
+    hasError = true;
+  } else if (nw === cur) {
+    passwordErrNew.textContent = 'Новый пароль должен отличаться от текущего';
+    passwordNew.classList.add('error');
+    hasError = true;
+  }
+  if (!cf) {
+    passwordErrConfirm.textContent = 'Повторите новый пароль';
+    passwordConfirm.classList.add('error');
+    hasError = true;
+  } else if (cf !== nw) {
+    passwordErrConfirm.textContent = 'Пароли не совпадают';
+    passwordConfirm.classList.add('error');
+    hasError = true;
+  }
+  if (hasError) return;
+
+  passwordSaveBtn.disabled = true;
+  passwordSaveBtn.textContent = 'Сохраняю...';
+
+  try {
+    const currentHash = await fbHashPassword(currentUserName, cur);
+    if (currentUserData.passHash !== currentHash) {
+      passwordErrCurrent.textContent = 'Неверный текущий пароль';
+      passwordCurrent.classList.add('error');
+      passwordCurrent.focus();
+      return;
+    }
+
+    const newHash = await fbHashPassword(currentUserName, nw);
+    const ok = await fbUpdateUser(currentUserName, { passHash: newHash });
+    if (!ok) {
+      passwordErrNew.textContent = 'Не удалось сохранить. Попробуйте позже.';
+      return;
+    }
+
+    currentUserData.passHash = newHash;
+    closePasswordModal();
+    showToast('Пароль изменён', 'info', 3000);
+  } finally {
+    passwordSaveBtn.disabled = false;
+    passwordSaveBtn.textContent = 'Сохранить';
+  }
+}
+
+/* Кнопки и события */
+document.getElementById('menuPassword').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  openPasswordModal();
+});
+document.getElementById('passwordCancel').addEventListener('click', closePasswordModal);
+document.getElementById('passwordSave').addEventListener('click', changePassword);
+passwordModal.addEventListener('click', (e) => {
+  if (e.target === passwordModal) closePasswordModal();
+});
+
+/* Сброс ошибки при вводе */
+[
+  [passwordCurrent, passwordErrCurrent],
+  [passwordNew, passwordErrNew],
+  [passwordConfirm, passwordErrConfirm],
+].forEach(([input, err]) => {
+  input.addEventListener('input', () => {
+    if (input.classList.contains('error')) {
+      input.classList.remove('error');
+      err.textContent = '';
+    }
+  });
+});
+
+/* Enter — отправка */
+[passwordCurrent, passwordNew, passwordConfirm].forEach(el => {
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
+  });
+});
