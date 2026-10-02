@@ -957,7 +957,7 @@ body.view-stats #exportWordsBtn { display: none !important; }
 .import-preview[hidden] { display: none; }
 
 .import-stats {
-  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;
 }
 .import-stat {
   display: flex; flex-direction: column; gap: 2px;
@@ -985,10 +985,10 @@ body.view-stats #exportWordsBtn { display: none !important; }
 .import-preview-title {
   font-size: 10px; text-transform: uppercase;
   letter-spacing: 1.8px; color: var(--ink-3);
-  font-weight: 600; margin-bottom: 6px;
+  font-weight: 600; margin-bottom: 12px;
 }
 .import-preview-table {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 10px;
   max-height: 340px; overflow-y: auto;
 }
 .import-preview-row {
@@ -1248,6 +1248,7 @@ body.view-stats #exportWordsBtn { display: none !important; }
   border: 1px solid var(--border-soft);
   border-radius: 3px;
   overflow: hidden;
+  margin-bottom: 4px;
 }
 
 .import-preview-group-header {
