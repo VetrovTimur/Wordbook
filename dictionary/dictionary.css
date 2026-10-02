@@ -988,8 +988,8 @@ body.view-stats #exportWordsBtn { display: none !important; }
   font-weight: 600; margin-bottom: 6px;
 }
 .import-preview-table {
-  display: flex; flex-direction: column; gap: 2px;
-  max-height: 170px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 340px; overflow-y: auto;
 }
 .import-preview-row {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
@@ -1232,4 +1232,77 @@ body.view-stats #exportWordsBtn { display: none !important; }
   .whats-new-icon svg { width: 14px; height: 14px; }
   .whats-new-title { font-size: 13px; }
   .whats-new-text { font-size: 11.5px; }
+}
+
+/* ---------- Превью по разделам ---------- */
+.field-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.import-preview-group {
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.import-preview-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+.import-preview-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--accent);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.import-preview-group-count {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.import-preview-group-new {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--paper);
+  background: var(--accent);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+  font-style: normal;
+  vertical-align: middle;
+}
+.import-preview-group-body {
+  padding: 4px 8px;
+  background: var(--paper);
+}
+.import-preview-group .import-preview-row {
+  background: transparent;
+  padding: 5px 6px;
+}
+
+@media (max-width: 640px) {
+  .import-preview-table { max-height: 260px; }
+  .import-preview-group-header { padding: 5px 8px; }
+  .import-preview-group-title { font-size: 11.5px; }
+  .import-preview-group-count { font-size: 10px; }
 }

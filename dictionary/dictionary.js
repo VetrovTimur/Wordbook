@@ -1044,8 +1044,24 @@ function parseCSVLine(line, delim) {
 
 const HEADER_WORDS = [
   'english', 'английский', 'en', 'слово', 'word',
-  'transcription', 'транскрипция', 'tr', 'перевод', 'russian', 'ru',
+  'transcription', 'транскрипция', 'tr',
+  'russian', 'русский', 'ru', 'перевод',
+  'section', 'раздел',
 ];
+
+/* Очистка имени раздела: буквы/цифры/пробел/скобки.
+   Всё остальное (эмодзи, дефис, подчёркивание, спецсимволы) → пробел. */
+function sanitizeSectionName(raw) {
+  let name = String(raw || '');
+  // Заменяем всё, что не буква/цифра/пробел/скобки, на пробел.
+  // \p{L} — любая буква (вкл. русские, é, ü, ñ), \p{N} — числа.
+  name = name.replace(/[^\p{L}\p{N}\s()]/gu, ' ');
+  // Схлопываем множественные пробелы
+  name = name.replace(/\s+/g, ' ').trim();
+  // Обрезаем до 50 символов
+  if (name.length > 50) name = name.slice(0, 50).trim();
+  return name;
+}
 
 function isHeaderRow(parts) {
   const first = String(parts[0] || '').toLowerCase().trim();
@@ -1073,9 +1089,11 @@ function parseRows2D(matrix) {
     const en = (parts[0] || '').trim();
     const tr = (parts[1] || '').trim();
     const ru = (parts[2] || '').trim();
+    const sectionRaw = (parts[3] || '').trim();
+    const section = sectionRaw ? sanitizeSectionName(sectionRaw) : '';
 
     if (!en || !ru) { errors++; continue; }
-    rows.push({ en, tr, ru });
+    rows.push({ en, tr, ru, section });
   }
   return { rows, errors };
 }
@@ -1208,6 +1226,7 @@ function updateImportPreview() {
     return;
   }
 
+  /* Дубли */
   const existing = new Set(state.words.map(w => String(w.en).toLowerCase().trim()));
   const seen = new Set();
   const unique = [];
@@ -1221,8 +1240,55 @@ function updateImportPreview() {
   importPending.uniqueRows = unique;
   importPending.dupes = dupes;
 
+  /* Группировка по разделам */
+  const hasSectionColumn = unique.some(r => r.section);
+  const defaultSectionId = document.getElementById('importSection').value;
+  const defaultSection = state.sections.find(s => s.id === defaultSectionId);
+  const defaultSectionName = defaultSection ? defaultSection.name : 'Без раздела';
+
+  const existingLower = new Map(state.sections.map(s => [s.name.toLowerCase(), s.name]));
+
+  const groups = new Map();   // key -> { name, isNew, words[] }
+  const orderedKeys = [];
+
+  for (const r of unique) {
+    const raw = (r.section || '').trim();
+    let key, name, isNew;
+
+    if (!raw) {
+      key = '__default__';
+      name = defaultSectionName;
+      isNew = false;
+    } else {
+      key = raw.toLowerCase();
+      const existingName = existingLower.get(key);
+      if (existingName) {
+        name = existingName;
+        isNew = false;
+      } else {
+        name = raw;
+        isNew = true;
+      }
+    }
+
+    if (!groups.has(key)) {
+      groups.set(key, { name, isNew, words: [] });
+      orderedKeys.push(key);
+    }
+    groups.get(key).words.push(r);
+  }
+
+  const totalSections = groups.size;
+  const newSections = [...groups.values()].filter(g => g.isNew).length;
+
+  /* Сортируем группы: обычные по порядку появления, '__default__' — в конец */
+  const sortedGroups = [...groups.entries()].sort((a, b) => {
+    if (a[0] === '__default__') return 1;
+    if (b[0] === '__default__') return -1;
+    return orderedKeys.indexOf(a[0]) - orderedKeys.indexOf(b[0]);
+  });
+
   const overLimit = unique.length > IMPORT_MAX;
-  const shown = unique.slice(0, IMPORT_PREVIEW_ROWS);
 
   el.hidden = false;
   el.innerHTML = `
@@ -1239,21 +1305,40 @@ function updateImportPreview() {
         <span class="import-stat-label">Ошибки</span>
         <span class="import-stat-value">${importPending.errors}</span>
       </div>
+      ${hasSectionColumn ? `
+      <div class="import-stat">
+        <span class="import-stat-label">Разделов</span>
+        <span class="import-stat-value">${totalSections}${newSections ? ` <span style="font-size:11px;color:var(--accent);font-style:italic;font-weight:600;">(+${newSections})</span>` : ''}</span>
+      </div>` : ''}
     </div>
     ${overLimit ? `<div class="import-warning">Слишком много слов: ${unique.length}. Максимум за раз — ${IMPORT_MAX}.</div>` : ''}
-    ${shown.length ? `
+    ${unique.length ? `
       <div class="import-preview-title">Предпросмотр</div>
       <div class="import-preview-table">
-        ${shown.map(r => `
-          <div class="import-preview-row">
-            <span class="ip-en">${escapeHtml(r.en)}</span>
-            <span class="ip-tr">${r.tr ? escapeHtml(r.tr) : '—'}</span>
-            <span class="ip-ru">${escapeHtml(r.ru)}</span>
+        ${sortedGroups.map(([key, g]) => `
+          <div class="import-preview-group">
+            <div class="import-preview-group-header">
+              <div class="import-preview-group-title">
+                ${key === '__default__'
+                  ? `Раздел по умолчанию (${escapeHtml(g.name)})`
+                  : escapeHtml(g.name)}
+                ${g.isNew ? '<span class="import-preview-group-new">новый</span>' : ''}
+              </div>
+              <div class="import-preview-group-count">
+                ${g.words.length} ${plural(g.words.length, 'слово', 'слова', 'слов')}
+              </div>
+            </div>
+            <div class="import-preview-group-body">
+              ${g.words.map(r => `
+                <div class="import-preview-row">
+                  <span class="ip-en">${escapeHtml(r.en)}</span>
+                  <span class="ip-tr">${r.tr ? escapeHtml(r.tr) : '—'}</span>
+                  <span class="ip-ru">${escapeHtml(r.ru)}</span>
+                </div>
+              `).join('')}
+            </div>
           </div>
         `).join('')}
-        ${unique.length > IMPORT_PREVIEW_ROWS
-          ? `<div class="import-preview-more">…и ещё ${unique.length - IMPORT_PREVIEW_ROWS}</div>`
-          : ''}
       </div>
     ` : ''}
   `;
@@ -1284,8 +1369,8 @@ function updateImportConfirmState() {
 async function executeImport() {
   if (!importPending || !importPending.uniqueRows || !importPending.uniqueRows.length) return;
   const rows = importPending.uniqueRows.slice(0, IMPORT_MAX);
-  const sectionId = document.getElementById('importSection').value;
-  if (!sectionId) return;
+  const defaultSectionId = document.getElementById('importSection').value;
+  if (!defaultSectionId) return;
 
   const prog = document.getElementById('importProgress');
   const fill = prog.querySelector('.import-progress-fill');
@@ -1299,9 +1384,31 @@ async function executeImport() {
 
   const total = rows.length;
 
+  /* Кэш существующих разделов: lowercase name -> id */
+  const sectionMap = new Map(state.sections.map(s => [s.name.toLowerCase(), s.id]));
+  const createdSections = [];
+
   for (let i = 0; i < total; i++) {
     const r = rows[i];
+    const raw = (r.section || '').trim();
+    let sectionId;
+
+    if (raw) {
+      const key = raw.toLowerCase();
+      if (!sectionMap.has(key)) {
+        /* Создаём новый раздел — по порядку появления в файле */
+        const newSection = { id: uid(), name: raw };
+        state.sections.push(newSection);
+        sectionMap.set(key, newSection.id);
+        createdSections.push(newSection.name);
+      }
+      sectionId = sectionMap.get(key);
+    } else {
+      sectionId = defaultSectionId;
+    }
+
     state.words.push({ id: uid(), sectionId, en: r.en, tr: r.tr, ru: r.ru });
+
     const done = i + 1;
     const pct = Math.round((done / total) * 100);
     fill.style.width = pct + '%';
@@ -1317,13 +1424,21 @@ async function executeImport() {
   shuffledOrder = [];
   state.currentPage = 1;
   state.view = 'dictionary';
-  state.activeSectionId = sectionId;
+  /* Если все слова ушли в один раздел — переходим туда, иначе — «Все слова» */
+  const usedSectionIds = new Set(rows.map(r => {
+    const raw = (r.section || '').trim();
+    return raw ? sectionMap.get(raw.toLowerCase()) : defaultSectionId;
+  }));
+  state.activeSectionId = usedSectionIds.size === 1
+    ? [...usedSectionIds][0]
+    : 'all';
   saveState();
   render();
 
   const parts = [`Импортировано: ${total}`];
   if (importPending.dupes) parts.push(`дубли: ${importPending.dupes}`);
   if (importPending.errors) parts.push(`ошибки формата: ${importPending.errors}`);
+  if (createdSections.length) parts.push(`разделов создано: ${createdSections.length}`);
   const type = total > 0 ? 'info' : 'warning';
   showToast(parts.join(' · '), type, 5000);
 
