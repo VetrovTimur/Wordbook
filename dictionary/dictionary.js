@@ -18,6 +18,8 @@ const defaultState = {
   calendarSeeded: false,
   sections: [],
   words: [],
+  dailyGoal: 5,
+  dailyProgress: {},
 };
 
 let currentUserName = null;
@@ -63,6 +65,82 @@ function markTodayVisited() {
   if (!state.visits.includes(todayISO)) {
     state.visits.push(todayISO);
     saveState();
+  }
+}
+
+/* ============================================================
+   ЦЕЛЬ ДНЯ
+   ============================================================ */
+
+function getTodayISO() { return toISO(new Date()); }
+
+function getTodayProgress() {
+  if (!state.dailyProgress || typeof state.dailyProgress !== 'object') {
+    state.dailyProgress = {};
+  }
+  return state.dailyProgress[getTodayISO()] || null;
+}
+
+function ensureTodayProgress() {
+  if (!state.dailyProgress || typeof state.dailyProgress !== 'object') {
+    state.dailyProgress = {};
+  }
+  const today = getTodayISO();
+  if (!state.dailyProgress[today]) {
+    state.dailyProgress[today] = {
+      added: 0,
+      goal: state.dailyGoal || 5,
+    };
+  }
+  return state.dailyProgress[today];
+}
+
+function markWordAdded(count = 1) {
+  if (!state.dailyGoal || state.dailyGoal <= 0) return;
+  const p = ensureTodayProgress();
+  const before = p.added;
+  p.added += count;
+  saveState();
+
+  /* Тост показывается один раз при пересечении порога */
+  if (p.added >= p.goal && before < p.goal) {
+    const w = plural(p.added, 'слово', 'слова', 'слов');
+    showToast(`🎯 Цель дня выполнена! ${p.added} ${w}`, 'info', 4000);
+  }
+}
+
+function isDayVisited(iso) {
+  const p = state.dailyProgress && state.dailyProgress[iso];
+  if (p) return p.added >= p.goal;
+  return Array.isArray(state.visits) && state.visits.includes(iso);
+}
+
+function renderGoalCard() {
+  const card = document.getElementById('goalCard');
+  if (!card) return;
+
+  const goal = state.dailyGoal || 0;
+  if (goal <= 0) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const today = getTodayISO();
+  const p = (state.dailyProgress && state.dailyProgress[today]) || { added: 0, goal };
+  const added = p.added || 0;
+  const done = added >= goal;
+  const pct = Math.min(100, Math.round((added / goal) * 100));
+
+  card.classList.toggle('done', done);
+
+  const fill = document.getElementById('goalProgressFill');
+  if (fill) fill.style.width = pct + '%';
+
+  const doneIcon = document.getElementById('goalCardDone');
+  if (doneIcon) doneIcon.hidden = !done;
+
+  const text = document.getElementById('goalCardText');
+  if (text) {
+    const w = plural(goal, 'слово', 'слова', 'слов');
+    text.textContent = `${added} из ${goal} ${w}`;
   }
 }
 
@@ -263,17 +341,34 @@ function renderCalendar() {
   for (let i = -CAL_DAYS_BEFORE; i <= CAL_DAYS_AFTER; i++) {
     const d = new Date(today); d.setDate(d.getDate() + i); days.push(d);
   }
+
+  /* Логика "сегодня" с учётом цели */
+  const goalEnabled = (state.dailyGoal || 0) > 0;
+  const todayProgress = getTodayProgress();
+  let todayDone;
+  if (goalEnabled) {
+    todayDone = todayProgress
+      ? todayProgress.added >= todayProgress.goal
+      : false;
+  } else {
+    todayDone = Array.isArray(state.visits) && state.visits.includes(todayISO);
+  }
+
   el.innerHTML = days.map(d => {
     const iso = toISO(d);
     const isToday = iso === todayISO;
     const isPast = d < today;
     const isFuture = d > today;
-    const visited = state.visits.includes(iso);
+
     let cls = 'day';
-    if (isToday) cls += ' day--today';
-    else if (isFuture) cls += ' day--future';
-    else if (isPast && visited) cls += ' day--past-visited';
-    else if (isPast && !visited) cls += ' day--past-missed';
+    if (isToday) {
+      cls += (goalEnabled && !todayDone) ? ' day--today-pending' : ' day--today';
+    } else if (isFuture) {
+      cls += ' day--future';
+    } else if (isPast) {
+      cls += isDayVisited(iso) ? ' day--past-visited' : ' day--past-missed';
+    }
+
     return `<div class="${cls}" title="${iso}">
       <span class="dow">${RU_DOW[d.getDay()]}</span>
       <span class="dn">${d.getDate()}</span>
@@ -281,7 +376,7 @@ function renderCalendar() {
   }).join('');
 
   requestAnimationFrame(() => {
-    const todayEl = el.querySelector('.day--today');
+    const todayEl = el.querySelector('.day--today, .day--today-pending');
     if (!todayEl) return;
     const wrapRect = el.getBoundingClientRect();
     const todayRect = todayEl.getBoundingClientRect();
@@ -296,9 +391,10 @@ function render() {
   document.getElementById('themeLabel').textContent =
     state.theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 
-  renderUserCard();
+    renderUserCard();
   document.body.classList.toggle('view-stats', state.view === 'stats');
 
+  renderGoalCard();
   renderCalendar();
   renderAllWordsBlock();
   renderSections();
@@ -781,6 +877,8 @@ document.addEventListener('keydown', (e) => {
     if (wnModal && wnModal.classList.contains('show')) closeWhatsNewModal();
     const pwdModal = document.getElementById('passwordModal');
     if (pwdModal && pwdModal.classList.contains('show')) closePasswordModal();
+     const gModal = document.getElementById('goalModal');
+    if (gModal && gModal.classList.contains('show')) closeGoalModal();
   }
 });
 
@@ -975,6 +1073,7 @@ function handleSaveWord() {
     state.words.push(newWord);
     lastAddedWordId = newWord.id;
     shuffledOrder = [];
+    markWordAdded(1);
   }
   saveState();
   closeWordModal();
@@ -1418,8 +1517,10 @@ async function executeImport() {
     }
   }
 
-  fill.style.width = '100%';
+    fill.style.width = '100%';
   text.textContent = `Готово: ${total}`;
+
+  markWordAdded(total);
 
   shuffledOrder = [];
   state.currentPage = 1;
@@ -1804,8 +1905,12 @@ async function initApp() {
   state = { ...defaultState, ...cloudState };
   if (!state.userName) state.userName = currentUserName;
 
-  document.body.setAttribute('data-theme', state.theme);
+    document.body.setAttribute('data-theme', state.theme);
 
+  /* Если цель включена — создаём/обновляем запись за сегодня */
+  if ((state.dailyGoal || 0) > 0) {
+    ensureTodayProgress();
+  }
   markTodayVisited();
 
   /* Прогрев воркера — чтобы транскрипция грузилась быстрее */
@@ -2003,6 +2108,85 @@ passwordModal.addEventListener('click', (e) => {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
   });
+});
+
+/* ============================================================
+   МОДАЛКА «ЦЕЛЬ ДНЯ»
+   ============================================================ */
+
+const goalModal = document.getElementById('goalModal');
+const goalShow = document.getElementById('goalShow');
+const goalCount = document.getElementById('goalCount');
+const goalCountGroup = document.getElementById('goalCountGroup');
+
+function openGoalModal() {
+  const goal = state.dailyGoal || 0;
+  goalShow.checked = goal > 0;
+  goalCount.value = goal > 0 ? goal : 5;
+  goalCountGroup.hidden = !goalShow.checked;
+  goalModal.classList.add('show');
+  if (goalShow.checked) {
+    setTimeout(() => goalCount.focus(), 80);
+  }
+}
+
+function closeGoalModal() {
+  goalModal.classList.remove('show');
+}
+
+function saveGoal() {
+  const enabled = goalShow.checked;
+  let newGoal = enabled ? parseInt(goalCount.value, 10) : 0;
+
+  if (enabled) {
+    if (isNaN(newGoal) || newGoal < 1) newGoal = 1;
+    if (newGoal > 100) newGoal = 100;
+  } else {
+    newGoal = 0;
+  }
+
+  const oldGoal = state.dailyGoal || 0;
+  state.dailyGoal = newGoal;
+
+  const today = getTodayISO();
+  if (state.dailyProgress && state.dailyProgress[today]) {
+    if (newGoal > 0) {
+      state.dailyProgress[today].goal = newGoal;
+    } else {
+      /* Выключили счётчик — убираем запись за сегодня */
+      delete state.dailyProgress[today];
+    }
+  }
+
+  saveState();
+  closeGoalModal();
+  render();
+
+  /* Уведомление */
+  if (newGoal !== oldGoal) {
+    if (newGoal === 0) {
+      showToast('Счётчик цели отключён', 'info', 3000);
+    } else {
+      const w = plural(newGoal, 'слово', 'слова', 'слов');
+      showToast(oldGoal === 0
+        ? `Цель дня: ${newGoal} ${w}`
+        : `Цель изменена на ${newGoal} ${w}`, 'info', 3000);
+    }
+  }
+}
+
+document.getElementById('goalCard').addEventListener('click', openGoalModal);
+document.getElementById('goalCancel').addEventListener('click', closeGoalModal);
+document.getElementById('goalSave').addEventListener('click', saveGoal);
+goalModal.addEventListener('click', (e) => {
+  if (e.target === goalModal) closeGoalModal();
+});
+goalShow.addEventListener('change', () => {
+  goalCountGroup.hidden = !goalShow.checked;
+  if (goalShow.checked) setTimeout(() => goalCount.focus(), 50);
+});
+goalCount.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveGoal(); }
 });
 
 /* ============================================================
