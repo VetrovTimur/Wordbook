@@ -323,12 +323,23 @@ function render() {
 
   const addBtn = document.getElementById('addWordBtn');
   const importBtn = document.getElementById('importWordsBtn');
+  const exportBtn = document.getElementById('exportWordsBtn');
+
   if (!state.sections.length) {
     addBtn.disabled = true; addBtn.title = 'Сначала создайте раздел';
     if (importBtn) { importBtn.disabled = true; importBtn.title = 'Сначала создайте раздел'; }
+    if (exportBtn) { exportBtn.disabled = true; exportBtn.title = 'Нет слов для экспорта'; }
   } else {
     addBtn.disabled = false; addBtn.title = '';
     if (importBtn) { importBtn.disabled = false; importBtn.title = ''; }
+
+    if (exportBtn) {
+      const wordsInView = state.activeSectionId === 'all'
+        ? state.words.length
+        : state.words.filter(w => w.sectionId === state.activeSectionId).length;
+      exportBtn.disabled = wordsInView === 0;
+      exportBtn.title = wordsInView === 0 ? 'Нет слов для экспорта' : '';
+    }
   }
 
   updateMenuActive();
@@ -1393,6 +1404,69 @@ if (dropzone) {
 }
 
 document.getElementById('importConfirm').addEventListener('click', executeImport);
+
+/* ============================================================
+   ЭКСПОРТ СЛОВ В CSV
+   ============================================================ */
+
+function exportWordsToCSV() {
+  const isAll = state.activeSectionId === 'all';
+  const words = isAll
+    ? state.words
+    : state.words.filter(w => w.sectionId === state.activeSectionId);
+
+  if (!words.length) {
+    showToast('Нет слов для экспорта', 'warning');
+    return;
+  }
+
+  const esc = (v) => {
+    const s = String(v ?? '');
+    if (s.includes(';') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+
+  const headers = isAll
+    ? ['english', 'transcription', 'russian', 'section']
+    : ['english', 'transcription', 'russian'];
+
+  const lines = [headers.join(';')];
+  const sectionMap = new Map(state.sections.map(s => [s.id, s.name]));
+
+  for (const w of words) {
+    const row = [esc(w.en), esc(w.tr || ''), esc(w.ru)];
+    if (isAll) row.push(esc(sectionMap.get(w.sectionId) || ''));
+    lines.push(row.join(';'));
+  }
+
+  const csv = '\uFEFF' + lines.join('\r\n');
+
+  const sectionName = getActiveSectionName();
+  const date = new Date().toISOString().slice(0, 10);
+  const slug = sectionName
+    .toLowerCase()
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 50) || 'words';
+  const fileName = `wordbook-${slug}-${date}.csv`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  const wordWord = plural(words.length, 'слово', 'слова', 'слов');
+  showToast(`Экспортировано ${words.length} ${wordWord}`, 'info', 3500);
+}
+
+document.getElementById('exportWordsBtn').addEventListener('click', exportWordsToCSV);
 
 /* ============================================================
    ОБРАТНАЯ СВЯЗЬ

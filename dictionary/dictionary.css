@@ -410,7 +410,12 @@ body {
 .day--past-missed .dn { color: var(--ink-3); font-weight: 400; }
 
 /* Заголовок и кнопки */
-.main-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.main-title-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
 .main-title-wrap { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; min-width: 0; }
 .main-title { font-size: 42px; font-weight: 400; font-style: italic; letter-spacing: -1px; line-height: 1; color: var(--ink); }
 .title-count {
@@ -422,7 +427,13 @@ body {
 .title-count .num { font-style: italic; font-weight: 700; font-size: 15px; color: var(--accent-hover); }
 .title-count.hidden { display: none; }
 
-.title-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
 .btn-primary {
   padding: 12px 24px; border: 1px solid var(--accent); border-radius: 3px;
@@ -493,7 +504,8 @@ body.view-stats .toolbar,
 body.view-stats .head-row,
 body.view-stats .pagination,
 body.view-stats #addWordBtn,
-body.view-stats #importWordsBtn { display: none !important; }
+body.view-stats #importWordsBtn,
+body.view-stats #exportWordsBtn { display: none !important; }
 
 /* Таблица слов */
 .words-scroll { flex: 1; overflow: auto; min-height: 0; padding: 0; position: relative; }
@@ -813,7 +825,7 @@ body.view-stats #importWordsBtn { display: none !important; }
   .main-title-wrap { gap: 10px; }
   .title-count { font-size: 11px; padding: 3px 8px; transform: translateY(-3px); }
   .title-count .num { font-size: 12px; }
-  .main-title-row { gap: 12px; align-items: center; }
+  .main-title-row { gap: 12px; }
   .btn-primary, .btn-back { padding: 9px 14px; font-size: 11px; letter-spacing: 1.2px; gap: 6px; }
   .head-row {
     grid-template-columns: minmax(120px, 1.4fr) minmax(110px, 1fr) minmax(120px, 1.4fr) 68px;
