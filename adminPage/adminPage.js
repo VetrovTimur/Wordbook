@@ -1071,6 +1071,10 @@ document.addEventListener('click', (e) => {
 document.getElementById('menuBackToApp').addEventListener('click', (e) => {
   e.stopPropagation();
   closeUserDropdown();
+  // Синхронизируем localStorage, чтобы словарь знал, кто мы
+  if (currentUserData && currentUserData.name) {
+    try { localStorage.setItem('wordbook_current_user', currentUserData.name); } catch (err) {}
+  }
   window.location.href = '../dictionary/dictionary.html';
 });
 
@@ -1078,6 +1082,9 @@ document.getElementById('menuAdminLogout').addEventListener('click', async (e) =
   e.stopPropagation();
   closeUserDropdown();
   try { await firebase.auth().signOut(); } catch (err) {}
+  // Чистим "текущего пользователя", чтобы после выхода словарь
+  // не открывался от имени админа
+  try { localStorage.removeItem('wordbook_current_user'); } catch (err) {}
   window.location.href = '../index.html';
 });
 
