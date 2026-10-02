@@ -1183,3 +1183,15 @@ if (document.readyState === 'loading') {
 } else {
   startPreloader();
 }
+
+/* ============================================================
+   PWA — Service Worker (обновление)
+   ============================================================ */
+let _swRefreshed = false;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swRefreshed) return;
+    _swRefreshed = true;
+    window.location.reload();
+  });
+}

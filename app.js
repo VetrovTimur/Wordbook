@@ -311,6 +311,18 @@ init();
 /* ============================================================
    PWA — Service Worker
    ============================================================ */
+
+// Автоматическая перезагрузка страницы, когда активируется новый SW.
+// Защита от цикла: refreshed = true, чтобы reload не запускался повторно.
+let _swRefreshed = false;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swRefreshed) return;
+    _swRefreshed = true;
+    window.location.reload();
+  });
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js').catch(err => {
