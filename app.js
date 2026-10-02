@@ -36,6 +36,7 @@ function clearCurrentUser() {
 }
 
 /* UI-состояние */
+const PASSWORD_MIN = 6;
 let authMode = 'login';
 let authRole = 'user';
 
@@ -59,6 +60,7 @@ function setAuthMode(mode) {
   const switchText = document.getElementById('authSwitchText');
   const switchBtn = document.getElementById('authSwitch');
   const confirmField = document.getElementById('authConfirmField');
+  const passHint = document.getElementById('authPassHint');
 
   if (mode === 'login') {
     heading.textContent = 'Вход в словарь';
@@ -66,12 +68,14 @@ function setAuthMode(mode) {
     switchText.textContent = 'Нет записи?';
     switchBtn.textContent = 'Создать';
     confirmField.hidden = true;
+    if (passHint) passHint.hidden = true;
   } else {
     heading.textContent = 'Новая запись';
     submit.textContent = 'Создать';
     switchText.textContent = 'Уже есть запись?';
     switchBtn.textContent = 'Войти';
     confirmField.hidden = false;
+    if (passHint) passHint.hidden = false;
   }
   clearAuthErrors();
   document.getElementById('authConfirm').value = '';
@@ -131,8 +135,12 @@ async function authSubmitHandler(e) {
     document.getElementById('authName').classList.add('error');
     hasError = true;
   }
-  if (!pass) {
+   if (!pass) {
     document.getElementById('authPassErr').textContent = 'Введите пароль';
+    document.getElementById('authPass').classList.add('error');
+    hasError = true;
+  } else if (authRole === 'user' && authMode === 'register' && pass.length < PASSWORD_MIN) {
+    document.getElementById('authPassErr').textContent = `Минимум ${PASSWORD_MIN} символов`;
     document.getElementById('authPass').classList.add('error');
     hasError = true;
   }
