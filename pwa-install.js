@@ -36,7 +36,6 @@
 
     if (mode === 'ios') {
       banner.innerHTML = `
-        <button class="pwa-install-close" type="button" aria-label="Закрыть">×</button>
         <div class="pwa-install-icon"><div class="pwa-install-logo">W</div></div>
         <div class="pwa-install-body">
           <div class="pwa-install-title">Установить Wordbook</div>
@@ -45,16 +44,17 @@
             «На экран „Домой"» — и приложение появится на главном.
           </div>
         </div>
+        <button class="pwa-install-close" type="button" aria-label="Закрыть">×</button>
       `;
     } else {
       banner.innerHTML = `
-        <button class="pwa-install-close" type="button" aria-label="Закрыть">×</button>
         <div class="pwa-install-icon"><div class="pwa-install-logo">W</div></div>
         <div class="pwa-install-body">
           <div class="pwa-install-title">Установить Wordbook</div>
           <div class="pwa-install-text">Быстрый доступ с главного экрана</div>
         </div>
         <button class="pwa-install-action" type="button">Установить</button>
+        <button class="pwa-install-close" type="button" aria-label="Закрыть">×</button>
       `;
     }
 

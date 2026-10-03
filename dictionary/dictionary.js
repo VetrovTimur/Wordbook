@@ -24,10 +24,11 @@
    [21] Импорт слов
    [22] Экспорт CSV
    [23] Обратная связь
-   [24] Что нового
-   [25] Инициализация и прелоадер
-   [26] Смена пароля
-   [27] Модалка «Цель дня»
+   [24] Поделиться
+   [25] Что нового
+   [26] Инициализация и прелоадер
+   [27] Смена пароля
+   [28] Модалка «Цель дня»
    ============================================================ */
 
 /* ============================================================
@@ -1843,7 +1844,49 @@ feedbackModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [24] ЧТО НОВОГО
+   [24] Поделиться
+   ============================================================ */
+
+const SHARE_URL = 'https://vetrovtimur.github.io/Wordbook/';
+const SHARE_TEXT = 'Попробуй Wordbook — личный словарь английского!';
+
+async function shareApp() {
+  const fullText = SHARE_TEXT + '\n' + SHARE_URL;
+
+  // 1) Системный шаринг (iOS Safari, Android Chrome, macOS Safari)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Wordbook',
+        text: SHARE_TEXT,
+        url: SHARE_URL,
+      });
+      return;
+    } catch (e) {
+      // Юзер отменил — ничего не делаем.
+      // Или ошибка — падаем в fallback ниже.
+      if (e && e.name === 'AbortError') return;
+    }
+  }
+
+  // 2) Fallback: копируем в буфер
+  try {
+    await navigator.clipboard.writeText(SHARE_URL);
+    showToast('🔗 Ссылка скопирована', 'info', 3000);
+  } catch (e) {
+    // 3) Совсем крайний случай — показываем ссылку в toast
+    showToast(SHARE_URL, 'info', 6000);
+  }
+}
+
+document.getElementById('menuShare').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  shareApp();
+});
+
+/* ============================================================
+   [25] ЧТО НОВОГО
    ============================================================ */
 
 const UPDATES_VERSION = 2;
@@ -1947,7 +1990,7 @@ document.getElementById('whatsNewModal').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [25] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
+   [26] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
    ============================================================ */
 
 async function initApp() {
@@ -2052,7 +2095,7 @@ if (document.readyState === 'loading') {
 }
 
 /* ============================================================
-   [26] СМЕНА ПАРОЛЯ
+   [27] СМЕНА ПАРОЛЯ
    ============================================================ */
 
 const passwordModal = document.getElementById('passwordModal');
@@ -2181,7 +2224,7 @@ passwordModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [27] МОДАЛКА «ЦЕЛЬ ДНЯ»
+   [28] МОДАЛКА «ЦЕЛЬ ДНЯ»
    ============================================================ */
 
 const goalModal = document.getElementById('goalModal');
