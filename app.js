@@ -144,7 +144,7 @@ async function tryAutoLogin() {
 
   let user = null;
   try {
-    user = await fbGetUser(name);
+    user = await fbGetUser(name, { silent: true });
   } catch (e) {
     user = null;
   }
@@ -259,7 +259,6 @@ async function handleRegister(name, pass) {
     shuffle: false,
     currentPage: 1,
     visits: [],
-    calendarSeeded: false,
     sections: [],
     words: [],
   });

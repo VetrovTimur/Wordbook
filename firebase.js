@@ -37,7 +37,6 @@ async function fbFetch(promiseFactory, errorContext, fallback = null, options = 
     return result;
   } catch (e) {
     clearTimeout(timeoutId);
-    console.error('[Firebase]', errorContext, '| code =', e && e.code, '| msg =', e && e.message, e);
 
     if (silent) return fallback;
 
@@ -52,7 +51,6 @@ async function fbFetch(promiseFactory, errorContext, fallback = null, options = 
     showToast(errorContext, 'error');
     return fallback;
   }
-}
 
 /* Хэш пароля: SHA-256 с солью имени пользователя.
    Формат хранения: "sha256:<64 hex>". */
@@ -66,11 +64,12 @@ async function fbHashPassword(name, pass) {
 }
 
 /* Пользователи */
-async function fbGetUser(name) {
+async function fbGetUser(name, options = {}) {
   return fbFetch(
     () => db.collection('users').doc(name).get().then(snap => snap.exists ? { name, ...snap.data() } : null),
     'Не удалось загрузить профиль',
-    null
+    null,
+    options
   );
 }
 
