@@ -1,4 +1,35 @@
-const CURRENT_USER_KEY = 'wordbook_current_user';
+/* ============================================================
+   adminPage.js — структура файла:
+
+   [1]  Константы и state
+   [2]  Тема
+   [3]  Загрузка данных
+   [4]  Типы логов и бейджи
+   [5]  Загрузка пользователей
+   [6]  Утилита withLoading
+   [7]  Статистика/фильтры пользователей
+   [8]  Пагинация пользователей
+   [9]  Статистика/фильтры логов
+   [10] Пагинация логов
+   [11] Главный render()
+   [12] Рендер бейджей
+   [13] Рендер статы/юзеров/пагинации
+   [14] Рендер логов
+   [15] Рендер обратной связи
+   [16] События: пользователи
+   [17] События: логи
+   [18] События: обратная связь
+   [19] Навигация
+   [20] Тема (клик)
+   [21] Модалки
+   [22] Дропдаун пользователя
+   [23] Инициализация и прелоадер
+   ============================================================ */
+
+/* ============================================================
+   [1] КОНСТАНТЫ И STATE
+   ============================================================ */
+
 const ADMIN_THEME_KEY = 'wordbook_admin_theme';
 const PAGE_SIZE = 15;
 const LOG_PAGE_SIZE = 20;
@@ -21,7 +52,10 @@ let feedbackSearch = '';
 let feedbackFilter = 'all';
 let feedbackPage = 1;
 
-/* Тема */
+/* ============================================================
+   [2] ТЕМА
+   ============================================================ */
+
 function loadTheme() {
   try { return localStorage.getItem(ADMIN_THEME_KEY) || 'light'; } catch (e) { return 'light'; }
 }
@@ -34,15 +68,21 @@ function applyTheme() {
   if (label) label.textContent = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
 }
 
-/* Логи */
+/* ============================================================
+   [3] ЗАГРУЗКА ДАННЫХ
+   ============================================================ */
+
 async function loadLogs() {
   logs = await fbGetLogs(500);
 }
 
-/* Обратная связь */
 async function loadFeedback() {
   feedbacks = await fbGetAllFeedback(500);
 }
+
+/* ============================================================
+   [4] ТИПЫ ЛОГОВ И БЕЙДЖИ
+   ============================================================ */
 
 const LOG_TYPES = {
   block: {
@@ -82,7 +122,10 @@ function updateFeedbackBadge() {
   if (badge) badge.textContent = feedbacks.filter(f => !f.read).length;
 }
 
-/* Пользователи */
+/* ============================================================
+   [5] ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ
+   ============================================================ */
+
 async function loadUsers() {
   const list = await fbGetAllUsers();
   users = list.map(u => ({
@@ -96,27 +139,10 @@ async function loadUsers() {
   users.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-/* Утилиты */
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c =>
-    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-}
-function plural(n, one, few, many) {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-  return many;
-}
-function formatDate(ts) {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
-}
-function formatTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
+/* ============================================================
+   [6] УТИЛИТА withLoading
+   ============================================================ */
+
 async function withLoading(btn, asyncFn) {
   if (!btn) return asyncFn();
   if (btn.classList.contains('is-loading')) return;
@@ -131,7 +157,10 @@ async function withLoading(btn, asyncFn) {
   }
 }
 
-/* Статистика и пагинация пользователей */
+/* ============================================================
+   [7] СТАТИСТИКА/ФИЛЬТРЫ ПОЛЬЗОВАТЕЛЕЙ
+   ============================================================ */
+
 function computeStats() {
   const total = users.length;
   const active = users.filter(u => !u.blocked).length;
@@ -156,6 +185,10 @@ function getFilteredUsers() {
   return list;
 }
 
+/* ============================================================
+   [8] ПАГИНАЦИЯ ПОЛЬЗОВАТЕЛЕЙ
+   ============================================================ */
+
 function getPageSlice() {
   const all = getFilteredUsers();
   const total = all.length;
@@ -167,7 +200,10 @@ function getPageSlice() {
   return { all, total, totalPages, start, end, pageItems: all.slice(start, end) };
 }
 
-/* Статистика и пагинация логов */
+/* ============================================================
+   [9] СТАТИСТИКА/ФИЛЬТРЫ ЛОГОВ
+   ============================================================ */
+
 function computeLogStats() {
   const total = logs.length;
   const blocks = logs.filter(l => l.type === 'block' || l.type === 'unblock').length;
@@ -192,6 +228,10 @@ function getFilteredLogs() {
   return list;
 }
 
+/* ============================================================
+   [10] ПАГИНАЦИЯ ЛОГОВ
+   ============================================================ */
+
 function getLogPageSlice() {
   const all = getFilteredLogs();
   const total = all.length;
@@ -203,7 +243,10 @@ function getLogPageSlice() {
   return { all, total, totalPages, start, end, pageItems: all.slice(start, end) };
 }
 
-/* Отрисовка */
+/* ============================================================
+   [11] ГЛАВНЫЙ RENDER()
+   ============================================================ */
+
 function render() {
   applyTheme();
   updateLogsBadge();
@@ -252,12 +295,19 @@ function render() {
   }
 }
 
+/* ============================================================
+   [12] РЕНДЕР БЕЙДЖЕЙ
+   ============================================================ */
+
 function renderNavBadge() {
   const badge = document.getElementById('navUsersBadge');
   if (badge) badge.textContent = users.length;
 }
 
-/* Отрисовка пользователей */
+/* ============================================================
+   [13] РЕНДЕР СТАТЫ/ЮЗЕРОВ/ПАГИНАЦИИ
+   ============================================================ */
+
 function renderStats() {
   const el = document.getElementById('adminStats');
   const s = computeStats();
@@ -437,7 +487,10 @@ function getPageNumbers(current, total) {
   return pages;
 }
 
-/* Отрисовка логов */
+/* ============================================================
+   [14] РЕНДЕР ЛОГОВ
+   ============================================================ */
+
 function renderLogsStats() {
   const el = document.getElementById('logsStats');
   const s = computeLogStats();
@@ -565,7 +618,10 @@ function renderLogsPagination() {
   el.innerHTML = info + prevBtn + numBtns + nextBtn;
 }
 
-/* Отрисовка обратной связи */
+/* ============================================================
+   [15] РЕНДЕР ОБРАТНОЙ СВЯЗИ
+   ============================================================ */
+
 function computeFeedbackStats() {
   const total = feedbacks.length;
   const unread = feedbacks.filter(f => !f.read).length;
@@ -727,7 +783,10 @@ function renderFeedbackPagination() {
   el.innerHTML = info + prevBtn + numBtns + nextBtn;
 }
 
-/* События: пользователи */
+/* ============================================================
+   [16] СОБЫТИЯ: ПОЛЬЗОВАТЕЛИ
+   ============================================================ */
+
 document.getElementById('usersList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -857,7 +916,10 @@ document.getElementById('exportBtn').addEventListener('click', async (e) => {
   });
 });
 
-/* События: логи */
+/* ============================================================
+   [17] СОБЫТИЯ: ЛОГИ
+   ============================================================ */
+
 document.getElementById('logsPagination').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-lpage]');
   if (!btn || btn.disabled) return;
@@ -909,7 +971,10 @@ document.getElementById('clearLogsBtn').addEventListener('click', async (e) => {
   });
 });
 
-/* События: обратная связь */
+/* ============================================================
+   [18] СОБЫТИЯ: ОБРАТНАЯ СВЯЗЬ
+   ============================================================ */
+
 document.getElementById('feedbackList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
   if (btn) {
@@ -991,7 +1056,10 @@ document.getElementById('refreshFeedbackBtn').addEventListener('click', async (e
   });
 });
 
-/* Навигация */
+/* ============================================================
+   [19] НАВИГАЦИЯ
+   ============================================================ */
+
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -1001,14 +1069,20 @@ document.querySelectorAll('.nav-item').forEach(item => {
   });
 });
 
-/* Тема */
+/* ============================================================
+   [20] ТЕМА (КЛИК)
+   ============================================================ */
+
 document.getElementById('themeToggle').addEventListener('click', () => {
   theme = theme === 'light' ? 'dark' : 'light';
   saveTheme(theme);
   applyTheme();
 });
 
-/* Модалки */
+/* ============================================================
+   [21] МОДАЛКИ
+   ============================================================ */
+
 let confirmResolver = null;
 const confirmModal = document.getElementById('confirmModal');
 function showConfirm(text, title = 'Подтвердите', okText = 'Удалить') {
@@ -1047,7 +1121,10 @@ function openUserModal(user) {
 document.getElementById('userModalClose').addEventListener('click', () => userModal.classList.remove('show'));
 userModal.addEventListener('click', (e) => { if (e.target === userModal) userModal.classList.remove('show'); });
 
-/* Дропдаун пользователя */
+/* ============================================================
+   [22] ДРОПДАУН ПОЛЬЗОВАТЕЛЯ
+   ============================================================ */
+
 function openUserDropdown() {
   document.getElementById('userCard').classList.add('open');
   document.getElementById('userCard').setAttribute('aria-expanded', 'true');
@@ -1071,9 +1148,8 @@ document.addEventListener('click', (e) => {
 document.getElementById('menuBackToApp').addEventListener('click', (e) => {
   e.stopPropagation();
   closeUserDropdown();
-  // Синхронизируем localStorage, чтобы словарь знал, кто мы
   if (currentUserData && currentUserData.name) {
-    try { localStorage.setItem('wordbook_current_user', currentUserData.name); } catch (err) {}
+    try { localStorage.setItem(CURRENT_USER_KEY, currentUserData.name); } catch (err) {}
   }
   window.location.href = '../dictionary/dictionary.html';
 });
@@ -1082,9 +1158,7 @@ document.getElementById('menuAdminLogout').addEventListener('click', async (e) =
   e.stopPropagation();
   closeUserDropdown();
   try { await firebase.auth().signOut(); } catch (err) {}
-  // Чистим "текущего пользователя", чтобы после выхода словарь
-  // не открывался от имени админа
-  try { localStorage.removeItem('wordbook_current_user'); } catch (err) {}
+  try { localStorage.removeItem(CURRENT_USER_KEY); } catch (err) {}
   window.location.href = '../index.html';
 });
 
@@ -1095,7 +1169,10 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* Инициализация */
+/* ============================================================
+   [23] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
+   ============================================================ */
+
 async function initApp() {
   const auth = firebase.auth();
 
@@ -1182,16 +1259,4 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startPreloader);
 } else {
   startPreloader();
-}
-
-/* ============================================================
-   PWA — Service Worker (обновление)
-   ============================================================ */
-let _swRefreshed = false;
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_swRefreshed) return;
-    _swRefreshed = true;
-    window.location.reload();
-  });
 }

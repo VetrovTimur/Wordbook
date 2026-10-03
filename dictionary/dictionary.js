@@ -1,4 +1,39 @@
-const CURRENT_USER_KEY = 'wordbook_current_user';
+/* ============================================================
+   dictionary.js — структура файла:
+
+   [1]  Константы и state
+   [2]  Текущий пользователь + сохранение
+   [3]  Цель дня
+   [4]  Утилиты
+   [5]  Статистика
+   [6]  Календарь
+   [7]  Главный render()
+   [8]  Карточка пользователя и меню
+   [9]  Сайдбар: разделы
+   [10] Таблица слов
+   [11] Пагинация
+   [12] Утилиты рендера (speakerSvg, section select)
+   [13] Дропдаун пользователя
+   [14] Модалка confirm
+   [15] Подсказка про транскрипцию
+   [16] Обработчики: сайдбар, тема
+   [17] Обработчики: меню, выход
+   [18] Обработчики: клавиши, поиск, shuffle, список слов
+   [19] Модалка слова
+   [20] Транскрипция
+   [21] Импорт слов
+   [22] Экспорт CSV
+   [23] Обратная связь
+   [24] Что нового
+   [25] Инициализация и прелоадер
+   [26] Смена пароля
+   [27] Модалка «Цель дня»
+   ============================================================ */
+
+/* ============================================================
+   [1] КОНСТАНТЫ И STATE
+   ============================================================ */
+
 const PAGE_SIZE = 15;
 const CAL_DAYS_BEFORE = 10;
 const CAL_DAYS_AFTER = 10;
@@ -15,7 +50,6 @@ const defaultState = {
   shuffle: false,
   currentPage: 1,
   visits: [],
-  calendarSeeded: false,
   sections: [],
   words: [],
   dailyGoal: 5,
@@ -35,6 +69,10 @@ let saveDebounceTimer = null;
 let trFetchTimer = null;
 let trAutoFilled = false;
 
+/* ============================================================
+   [2] ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ + СОХРАНЕНИЕ
+   ============================================================ */
+
 function getCurrentUser() {
   try { return localStorage.getItem(CURRENT_USER_KEY); } catch (e) { return null; }
 }
@@ -51,14 +89,6 @@ function saveState() {
   }, 400);
 }
 
-/* Утилиты */
-function toISO(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function markTodayVisited() {
   if (!Array.isArray(state.visits)) state.visits = [];
   const todayISO = toISO(new Date());
@@ -69,7 +99,7 @@ function markTodayVisited() {
 }
 
 /* ============================================================
-   ЦЕЛЬ ДНЯ
+   [3] ЦЕЛЬ ДНЯ
    ============================================================ */
 
 function getTodayISO() { return toISO(new Date()); }
@@ -102,7 +132,6 @@ function markWordAdded(count = 1) {
   p.added += count;
   saveState();
 
-  /* Тост показывается один раз при пересечении порога */
   if (p.added >= p.goal && before < p.goal) {
     const w = plural(p.added, 'слово', 'слова', 'слов');
     showToast(`🎯 Цель дня выполнена! ${p.added} ${w}`, 'info', 4000);
@@ -144,6 +173,10 @@ function renderGoalCard() {
   }
 }
 
+/* ============================================================
+   [4] УТИЛИТЫ
+   ============================================================ */
+
 function speak(text, lang, btnEl) {
   if (!('speechSynthesis' in window) || !text) return;
   try { window.speechSynthesis.cancel(); } catch (e) {}
@@ -160,17 +193,6 @@ function speak(text, lang, btnEl) {
   }
 }
 
-const uid = () => 'id_' + Math.random().toString(36).slice(2, 10);
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c =>
-    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-}
-function plural(n, one, few, many) {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-  return many;
-}
 function shuffleArray(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -223,11 +245,13 @@ function getPageSlice() {
   return { all, total, totalPages, start, end, pageWords: all.slice(start, end) };
 }
 
-/* Статистика */
+/* ============================================================
+   [5] СТАТИСТИКА
+   ============================================================ */
+
 function computeStats() {
   const today = new Date(); today.setHours(0,0,0,0);
 
-  /* Собираем все ISO-даты, где либо был заход, либо есть запись прогресса */
   const allDates = new Set();
   (Array.isArray(state.visits) ? state.visits : []).forEach(v => allDates.add(v));
   if (state.dailyProgress && typeof state.dailyProgress === 'object') {
@@ -235,7 +259,6 @@ function computeStats() {
   }
   const uniq = [...allDates].sort();
 
-  /* Текущая серия: идём назад от сегодня, пока дни засчитаны */
   let streak = 0;
   let cur = new Date(today);
   while (isDayVisited(toISO(cur))) {
@@ -244,7 +267,6 @@ function computeStats() {
     if (streak > 3650) break;
   }
 
-  /* Лучшая серия: по всем датам по возрастанию, сбрасываем при незасчитанном дне */
   let bestStreak = 0, run = 0, prevDate = null;
   for (const iso of uniq) {
     if (!isDayVisited(iso)) { run = 0; prevDate = null; continue; }
@@ -255,14 +277,12 @@ function computeStats() {
     prevDate = d;
   }
 
-  /* С нами: от первой даты до сегодня */
   let daysWithUs = 0;
   if (uniq.length) {
     const first = new Date(uniq[0] + 'T00:00:00');
     daysWithUs = Math.floor((today - first) / 86400000) + 1;
   }
 
-  /* Пропущено: между первой датой и вчера — все незасчитанные */
   let missed = 0;
   if (uniq.length) {
     const first = new Date(uniq[0] + 'T00:00:00');
@@ -274,7 +294,6 @@ function computeStats() {
     }
   }
 
-  /* Всего заходов: количество засчитанных дней */
   let totalVisits = 0;
   for (const iso of uniq) if (isDayVisited(iso)) totalVisits++;
 
@@ -354,6 +373,10 @@ function renderStats() {
   `;
 }
 
+/* ============================================================
+   [6] КАЛЕНДАРЬ
+   ============================================================ */
+
 function renderCalendar() {
   const el = document.getElementById('calendar');
   const today = new Date(); today.setHours(0,0,0,0);
@@ -364,7 +387,6 @@ function renderCalendar() {
     const d = new Date(today); d.setDate(d.getDate() + i); days.push(d);
   }
 
-  /* Логика "сегодня" с учётом цели */
   const goalEnabled = (state.dailyGoal || 0) > 0;
   const todayProgress = getTodayProgress();
   let todayDone;
@@ -407,6 +429,10 @@ function renderCalendar() {
     el.scrollTo({ left: Math.max(0, targetScroll), behavior: 'auto' });
   });
 }
+
+/* ============================================================
+   [7] ГЛАВНЫЙ RENDER()
+   ============================================================ */
 
 function render() {
   document.body.setAttribute('data-theme', state.theme);
@@ -462,6 +488,10 @@ function render() {
 
   updateMenuActive();
 }
+
+/* ============================================================
+   [8] КАРТОЧКА ПОЛЬЗОВАТЕЛЯ И МЕНЮ
+   ============================================================ */
 
 function renderUserCard() {
   if (!currentUserData) return;
@@ -522,6 +552,10 @@ function updateMenuActive() {
   dict.classList.toggle('active', state.view === 'dictionary');
   stats.classList.toggle('active', state.view === 'stats');
 }
+
+/* ============================================================
+   [9] САЙДБАР: РАЗДЕЛЫ
+   ============================================================ */
 
 function renderAllWordsBlock() {
   const total = state.words.length;
@@ -624,6 +658,10 @@ function renderAddSection() {
   }
 }
 
+/* ============================================================
+   [10] ТАБЛИЦА СЛОВ
+   ============================================================ */
+
 function renderWords() {
   const container = document.getElementById('wordList');
   const { pageWords, total } = getPageSlice();
@@ -681,6 +719,10 @@ function renderWords() {
   }
 }
 
+/* ============================================================
+   [11] ПАГИНАЦИЯ
+   ============================================================ */
+
 function renderPagination() {
   const el = document.getElementById('pagination');
   const { total, totalPages, start, end } = getPageSlice();
@@ -729,6 +771,10 @@ document.getElementById('pagination').addEventListener('click', (e) => {
   else goToPage(parseInt(val, 10));
 });
 
+/* ============================================================
+   [12] УТИЛИТЫ РЕНДЕРА (speakerSvg, section select)
+   ============================================================ */
+
 function speakerSvg() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
@@ -743,6 +789,10 @@ function renderSectionSelect() {
   else if (state.sections.some(s => s.id === state.activeSectionId)) sel.value = state.activeSectionId;
   else if (state.sections.length) sel.value = state.sections[0].id;
 }
+
+/* ============================================================
+   [13] ДРОПДАУН ПОЛЬЗОВАТЕЛЯ
+   ============================================================ */
 
 function openUserDropdown() {
   const card = document.getElementById('userCard');
@@ -763,6 +813,10 @@ function toggleUserDropdown() {
   else openUserDropdown();
 }
 
+/* ============================================================
+   [14] МОДАЛКА CONFIRM
+   ============================================================ */
+
 let confirmResolver = null;
 const confirmModal = document.getElementById('confirmModal');
 function showConfirm(text, title = 'Подтвердите', okText = 'Удалить') {
@@ -782,7 +836,10 @@ document.getElementById('confirmOk').addEventListener('click', () => resolveConf
 document.getElementById('confirmCancel').addEventListener('click', () => resolveConfirm(false));
 confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) resolveConfirm(false); });
 
-/* Подсказка про медленную транскрипцию */
+/* ============================================================
+   [15] ПОДСКАЗКА ПРО МЕДЛЕННУЮ ТРАНСКРИПЦИЮ
+   ============================================================ */
+
 function showTrHintIfNeeded() {
   if (!currentUserName) return;
   const key = TR_HINT_KEY_PREFIX + currentUserName;
@@ -805,6 +862,10 @@ function showTrHintIfNeeded() {
     if (e.target === modal) close();
   }, { once: true });
 }
+
+/* ============================================================
+   [16] ОБРАБОТЧИКИ: САЙДБАР, ТЕМА
+   ============================================================ */
 
 document.querySelector('.sidebar').addEventListener('click', async (e) => {
   const delBtn = e.target.closest('[data-delete-section]');
@@ -841,6 +902,10 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
   saveState(); render();
 });
+
+/* ============================================================
+   [17] ОБРАБОТЧИКИ: МЕНЮ, ВЫХОД
+   ============================================================ */
 
 document.getElementById('userCard').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -881,6 +946,10 @@ document.getElementById('backToDictBtn').addEventListener('click', () => {
   state.view = 'dictionary';
   saveState(); render();
 });
+
+/* ============================================================
+   [18] ОБРАБОТЧИКИ: КЛАВИШИ, ПОИСК, SHUFFLE, СПИСОК СЛОВ
+   ============================================================ */
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
@@ -963,6 +1032,10 @@ document.getElementById('wordList').addEventListener('click', async (e) => {
   if (editBtn) { e.preventDefault(); openEditWordModal(editBtn.getAttribute('data-edit-word')); }
 });
 
+/* ============================================================
+   [19] МОДАЛКА СЛОВА
+   ============================================================ */
+
 const wordModal = document.getElementById('wordModal');
 const inEn = document.getElementById('inEn');
 const inTr = document.getElementById('inTr');
@@ -975,48 +1048,6 @@ const saveWordBtn = document.getElementById('saveWord');
 function resetErrors() {
   inEn.classList.remove('error'); inRu.classList.remove('error');
   errEn.textContent = ''; errRu.textContent = '';
-}
-
-async function fetchTranscription(word) {
-  const w = word.trim().toLowerCase();
-  if (w.length < 2) return null;
-
-  const url = WORKER_URL + '?word=' + encodeURIComponent(w);
-
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 30000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    for (const entry of data) {
-      if (entry.phonetic) return entry.phonetic;
-      if (Array.isArray(entry.phonetics)) {
-        for (const p of entry.phonetics) {
-          if (p.text) return p.text;
-        }
-      }
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function scheduleTranscriptionFetch() {
-  if (trFetchTimer) clearTimeout(trFetchTimer);
-  trFetchTimer = setTimeout(async () => {
-    const en = inEn.value.trim();
-    if (!en) return;
-    if (inTr.value.trim() && !trAutoFilled) return;
-    const tr = await fetchTranscription(en);
-    if (tr && (!inTr.value.trim() || trAutoFilled)) {
-      inTr.value = tr;
-      trAutoFilled = true;
-    }
-  }, 600);
 }
 
 function openAddWordModal() {
@@ -1122,11 +1153,56 @@ saveWordBtn.addEventListener('click', handleSaveWord);
 });
 
 /* ============================================================
-   ИМПОРТ СЛОВ (paste + xlsx/csv)
+   [20] ТРАНСКРИПЦИЯ
+   ============================================================ */
+
+async function fetchTranscription(word) {
+  const w = word.trim().toLowerCase();
+  if (w.length < 2) return null;
+
+  const url = WORKER_URL + '?word=' + encodeURIComponent(w);
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    for (const entry of data) {
+      if (entry.phonetic) return entry.phonetic;
+      if (Array.isArray(entry.phonetics)) {
+        for (const p of entry.phonetics) {
+          if (p.text) return p.text;
+        }
+      }
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function scheduleTranscriptionFetch() {
+  if (trFetchTimer) clearTimeout(trFetchTimer);
+  trFetchTimer = setTimeout(async () => {
+    const en = inEn.value.trim();
+    if (!en) return;
+    if (inTr.value.trim() && !trAutoFilled) return;
+    const tr = await fetchTranscription(en);
+    if (tr && (!inTr.value.trim() || trAutoFilled)) {
+      inTr.value = tr;
+      trAutoFilled = true;
+    }
+  }, 600);
+}
+
+/* ============================================================
+   [21] ИМПОРТ СЛОВ (paste + xlsx/csv)
    ============================================================ */
 
 const IMPORT_MAX = 100;
-const IMPORT_PREVIEW_ROWS = 5;
 const IMPORT_CHUNK = 20;
 
 let importPending = null;
@@ -1170,20 +1246,6 @@ const HEADER_WORDS = [
   'section', 'раздел',
 ];
 
-/* Очистка имени раздела: буквы/цифры/пробел/скобки.
-   Всё остальное (эмодзи, дефис, подчёркивание, спецсимволы) → пробел. */
-function sanitizeSectionName(raw) {
-  let name = String(raw || '');
-  // Заменяем всё, что не буква/цифра/пробел/скобки, на пробел.
-  // \p{L} — любая буква (вкл. русские, é, ü, ñ), \p{N} — числа.
-  name = name.replace(/[^\p{L}\p{N}\s()]/gu, ' ');
-  // Схлопываем множественные пробелы
-  name = name.replace(/\s+/g, ' ').trim();
-  // Обрезаем до 50 символов
-  if (name.length > 50) name = name.slice(0, 50).trim();
-  return name;
-}
-
 function isHeaderRow(parts) {
   const first = String(parts[0] || '').toLowerCase().trim();
   if (!first) return false;
@@ -1225,18 +1287,6 @@ function parseImportText(text) {
   const delim = detectDelimiter(lines[0]);
   const matrix = lines.map(l => parseCSVLine(l, delim));
   return parseRows2D(matrix);
-}
-
-/* ---------- Lazy-load SheetJS с фолбэком ---------- */
-
-function loadScript(url) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = url;
-    s.onload = () => resolve(true);
-    s.onerror = () => reject(new Error('load fail: ' + url));
-    document.head.appendChild(s);
-  });
 }
 
 async function loadSheetJS() {
@@ -1347,7 +1397,6 @@ function updateImportPreview() {
     return;
   }
 
-  /* Дубли */
   const existing = new Set(state.words.map(w => String(w.en).toLowerCase().trim()));
   const seen = new Set();
   const unique = [];
@@ -1361,7 +1410,6 @@ function updateImportPreview() {
   importPending.uniqueRows = unique;
   importPending.dupes = dupes;
 
-  /* Группировка по разделам */
   const hasSectionColumn = unique.some(r => r.section);
   const defaultSectionId = document.getElementById('importSection').value;
   const defaultSection = state.sections.find(s => s.id === defaultSectionId);
@@ -1369,7 +1417,7 @@ function updateImportPreview() {
 
   const existingLower = new Map(state.sections.map(s => [s.name.toLowerCase(), s.name]));
 
-  const groups = new Map();   // key -> { name, isNew, words[] }
+  const groups = new Map();
   const orderedKeys = [];
 
   for (const r of unique) {
@@ -1402,7 +1450,6 @@ function updateImportPreview() {
   const totalSections = groups.size;
   const newSections = [...groups.values()].filter(g => g.isNew).length;
 
-  /* Сортируем группы: обычные по порядку появления, '__default__' — в конец */
   const sortedGroups = [...groups.entries()].sort((a, b) => {
     if (a[0] === '__default__') return 1;
     if (b[0] === '__default__') return -1;
@@ -1505,7 +1552,6 @@ async function executeImport() {
 
   const total = rows.length;
 
-  /* Кэш существующих разделов: lowercase name -> id */
   const sectionMap = new Map(state.sections.map(s => [s.name.toLowerCase(), s.id]));
   const createdSections = [];
 
@@ -1517,7 +1563,6 @@ async function executeImport() {
     if (raw) {
       const key = raw.toLowerCase();
       if (!sectionMap.has(key)) {
-        /* Создаём новый раздел — по порядку появления в файле */
         const newSection = { id: uid(), name: raw };
         state.sections.push(newSection);
         sectionMap.set(key, newSection.id);
@@ -1547,7 +1592,6 @@ async function executeImport() {
   shuffledOrder = [];
   state.currentPage = 1;
   state.view = 'dictionary';
-  /* Если все слова ушли в один раздел — переходим туда, иначе — «Все слова» */
   const usedSectionIds = new Set(rows.map(r => {
     const raw = (r.section || '').trim();
     return raw ? sectionMap.get(raw.toLowerCase()) : defaultSectionId;
@@ -1646,7 +1690,7 @@ if (dropzone) {
 document.getElementById('importConfirm').addEventListener('click', executeImport);
 
 /* ============================================================
-   ЭКСПОРТ СЛОВ В CSV
+   [22] ЭКСПОРТ СЛОВ В CSV
    ============================================================ */
 
 function exportWordsToCSV() {
@@ -1709,7 +1753,7 @@ function exportWordsToCSV() {
 document.getElementById('exportWordsBtn').addEventListener('click', exportWordsToCSV);
 
 /* ============================================================
-   ОБРАТНАЯ СВЯЗЬ
+   [23] ОБРАТНАЯ СВЯЗЬ
    ============================================================ */
 
 const FEEDBACK_MAX = 2000;
@@ -1799,21 +1843,19 @@ feedbackModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   ЧТО НОВОГО
+   [24] ЧТО НОВОГО
    ============================================================ */
 
 const UPDATES_VERSION = 2;
 const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_';
 
 const UPDATES = [
-  /* ── Версия 2 (новые) ── */
   { type: 'feature', icon: 'download', title: 'Экспорт словаря в CSV',     text: 'Скачайте весь словарь или отдельный раздел — с колонкой «раздел».' },
   { type: 'feature', icon: 'target',   title: 'Цель дня',                  text: 'Ставьте цель по словам на день и следите за прогрессом. Дни, когда цель выполнена, отмечаются в календаре.' },
   { type: 'feature', icon: 'install',  title: 'Установка на телефон',      text: 'Wordbook теперь можно установить как приложение — иконка на главном экране.' },
   { type: 'feature', icon: 'key',      title: 'Смена пароля',              text: 'Меняйте пароль прямо из словаря — без перелогина и лишних шагов.' },
   { type: 'improve', icon: 'import',   title: 'Импорт с разделами',        text: 'Четвёртая колонка «раздел» в Excel — слова автоматически раскладываются по своим папкам.' },
 
-  /* ── Версия 1 ── */
   { type: 'feature', icon: 'chart',    title: 'Статистика занятий',        text: 'Серии заходов, лучший результат, дни с нами и пропуски — дневник ваших занятий.' },
   { type: 'feature', icon: 'import',   title: 'Импорт слов из Excel',      text: 'Вставьте список или загрузите файл .xlsx / .csv, до 100 слов за раз.' },
   { type: 'feature', icon: 'search',   title: 'Умный поиск',               text: 'Ищите по слову, переводу или транскрипции.' },
@@ -1904,7 +1946,10 @@ document.getElementById('whatsNewModal').addEventListener('click', (e) => {
   if (e.target === document.getElementById('whatsNewModal')) closeWhatsNewModal();
 });
 
-/* Инициализация */
+/* ============================================================
+   [25] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
+   ============================================================ */
+
 async function initApp() {
   currentUserName = getCurrentUser();
   if (!currentUserName) {
@@ -1930,7 +1975,6 @@ async function initApp() {
       shuffle: false,
       currentPage: 1,
       visits: [],
-      calendarSeeded: false,
       sections: [],
       words: [],
     };
@@ -1941,20 +1985,17 @@ async function initApp() {
 
     document.body.setAttribute('data-theme', state.theme);
 
-  /* Если цель включена — создаём/обновляем запись за сегодня */
   if ((state.dailyGoal || 0) > 0) {
     ensureTodayProgress();
   }
   markTodayVisited();
 
-  /* Прогрев воркера — чтобы транскрипция грузилась быстрее */
   fetch(WORKER_URL + '?word=hello').catch(() => {});
 
   render();
   renderUserMenu();
   updateWhatsNewBadge();
 
-  /* Показать подсказку после прелоадера, один раз */
   setTimeout(showTrHintIfNeeded, PRELOADER_MIN_TIME + 100);
 }
 
@@ -2011,10 +2052,8 @@ if (document.readyState === 'loading') {
 }
 
 /* ============================================================
-   СМЕНА ПАРОЛЯ
+   [26] СМЕНА ПАРОЛЯ
    ============================================================ */
-
-const PASSWORD_MIN = 6;
 
 const passwordModal = document.getElementById('passwordModal');
 const passwordCurrent = document.getElementById('passwordCurrent');
@@ -2111,7 +2150,6 @@ async function changePassword() {
   }
 }
 
-/* Кнопки и события */
 document.getElementById('menuPassword').addEventListener('click', (e) => {
   e.stopPropagation();
   closeUserDropdown();
@@ -2123,7 +2161,6 @@ passwordModal.addEventListener('click', (e) => {
   if (e.target === passwordModal) closePasswordModal();
 });
 
-/* Сброс ошибки при вводе */
 [
   [passwordCurrent, passwordErrCurrent],
   [passwordNew, passwordErrNew],
@@ -2137,7 +2174,6 @@ passwordModal.addEventListener('click', (e) => {
   });
 });
 
-/* Enter — отправка */
 [passwordCurrent, passwordNew, passwordConfirm].forEach(el => {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
@@ -2145,7 +2181,7 @@ passwordModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   МОДАЛКА «ЦЕЛЬ ДНЯ»
+   [27] МОДАЛКА «ЦЕЛЬ ДНЯ»
    ============================================================ */
 
 const goalModal = document.getElementById('goalModal');
@@ -2159,7 +2195,6 @@ function openGoalModal() {
   goalCount.value = goal > 0 ? goal : 5;
   goalCountGroup.hidden = !goalShow.checked;
 
-  /* Подсказку про «с завтрашнего дня» показываем только если счётчик уже был включён */
   const hint = document.getElementById('goalModalHint');
   if (hint) hint.hidden = !(goal > 0);
 
@@ -2193,21 +2228,16 @@ function saveGoal() {
   if (!state.dailyProgress) state.dailyProgress = {};
 
   if (newGoal === 0) {
-    /* Выключили — убираем запись за сегодня (день считается по заходу) */
     delete state.dailyProgress[today];
   } else if (oldGoal === 0) {
-    /* Включили с нуля — применяем сегодня же */
     const rec = state.dailyProgress[today];
     state.dailyProgress[today] = { added: rec ? rec.added : 0, goal: newGoal };
   }
-  /* Если счётчик уже был включён и число меняется — применяется со следующего дня.
-     Сегодняшняя запись сохраняет старую цель. */
 
   saveState();
   closeGoalModal();
   render();
 
-  /* Уведомление */
   if (newGoal === 0) {
     showToast('Счётчик цели отключён', 'info', 3000);
   } else if (oldGoal === 0) {
@@ -2237,15 +2267,3 @@ goalShow.addEventListener('change', () => {
 goalCount.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); saveGoal(); }
 });
-
-/* ============================================================
-   PWA — Service Worker (обновление)
-   ============================================================ */
-let _swRefreshed = false;
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_swRefreshed) return;
-    _swRefreshed = true;
-    window.location.reload();
-  });
-}
