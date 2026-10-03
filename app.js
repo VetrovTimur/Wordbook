@@ -362,9 +362,14 @@ init();
    ============================================================ */
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('service-worker.js').catch(err => {
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('service-worker.js', {
+        updateViaCache: 'none'
+      });
+      await reg.update();
+    } catch (err) {
       console.warn('[PWA] SW registration failed:', err);
-    });
+    }
   });
 }
