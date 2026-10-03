@@ -11,9 +11,25 @@
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="default">
         <meta name="apple-mobile-web-app-title" content="Wordbook">
+        <link rel="stylesheet" href="common.css">
         <link rel="stylesheet" href="style.css">
     </head>
     <body>
+        <!-- Auth preloader (показывается при автологине) -->
+        <div class="preloader" id="authPreloader" style="display: none;">
+        <div class="preloader-inner">
+            <div class="preloader-mark">
+            <div class="preloader-logo">W</div>
+            </div>
+            <div style="text-align: center;">
+            <div class="preloader-title">Wordbook</div>
+            <div class="preloader-sub">Вход</div>
+            </div>
+            <div class="preloader-dots">
+            <span></span><span></span><span></span>
+            </div>
+        </div>
+        </div>
 
         <div class="auth-screen" id="authScreen">
             <button class="auth-theme-toggle" id="authThemeToggle" type="button" title="Переключить тему" aria-label="Переключить тему">
@@ -83,6 +99,7 @@
         <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
         <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
+        <script src="common.js"></script>
         <script src="firebase.js"></script>
         <script src="app.js"></script>
     </body>

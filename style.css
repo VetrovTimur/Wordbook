@@ -1,57 +1,4 @@
-:root {
-  --paper: #f5efe2;
-  --paper-2: #ede5d3;
-  --paper-3: #e3d9c2;
-  --ink: #2b2118;
-  --ink-2: #5a4a3a;
-  --ink-3: #97867a;
-  --border: #c9bca4;
-  --border-soft: #ddd2bd;
-  --accent: #7a5c3e;
-  --accent-hover: #5f4629;
-  --accent-soft: #eadfca;
-  --danger: #8b3a3a;
-  --gold: #b08d57;
-  --card-shadow: 0 2px 12px rgba(80, 55, 30, 0.08);
-  --card-shadow-lg: 0 12px 40px rgba(80, 55, 30, 0.18);
-  --rule: rgba(122, 92, 62, 0.25);
-}
-
-[data-theme="dark"] {
-  --paper: #1c1814;
-  --paper-2: #231e18;
-  --paper-3: #2b251d;
-  --ink: #ece2ce;
-  --ink-2: #c4b498;
-  --ink-3: #8a7c68;
-  --border: #3d3428;
-  --border-soft: #2e2720;
-  --accent: #c9a97a;
-  --accent-hover: #dcc094;
-  --accent-soft: #2f2718;
-  --danger: #c97777;
-  --gold: #d4b176;
-  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  --card-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
-  --rule: rgba(201, 169, 122, 0.18);
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
-
-body {
-  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
-  background: var(--paper-2);
-  color: var(--ink);
-  min-height: 100vh;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(176, 141, 87, 0.05) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(122, 92, 62, 0.06) 0%, transparent 45%);
-  background-attachment: fixed;
-  transition: background-color 0.25s ease, color 0.25s ease;
-}
+/* style.css — только стили страницы входа */
 
 /* ============ AUTH SCREEN ============ */
 .auth-screen {
@@ -316,7 +263,6 @@ body {
 
 /* ============ MOBILE ============ */
 @media (max-width: 640px) {
-  body { padding: 0; }
   .auth-card { padding: 40px 26px 34px; }
   .auth-logo { width: 56px; height: 56px; font-size: 28px; }
   .auth-title { font-size: 26px; }

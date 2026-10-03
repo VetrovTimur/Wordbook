@@ -22,9 +22,6 @@ function toggleTheme() {
   applyTheme();
 }
 
-/* Текущий пользователь (localStorage) */
-const CURRENT_USER_KEY = 'wordbook_current_user';
-
 function getCurrentUser() {
   try { return localStorage.getItem(CURRENT_USER_KEY); } catch (e) { return null; }
 }
@@ -36,7 +33,6 @@ function clearCurrentUser() {
 }
 
 /* UI-состояние */
-const PASSWORD_MIN = 6;
 let authMode = 'login';
 let authRole = 'user';
 
@@ -117,6 +113,56 @@ function setAuthRole(role) {
     clearAuthErrors();
     setAuthMode(authMode);
   }
+}
+
+/* ============================================================
+   Автологин (запоминание сессии)
+   ============================================================ */
+
+function showAuthPreloader() {
+  const p = document.getElementById('authPreloader');
+  if (p) p.style.display = 'grid';
+}
+function hideAuthPreloader() {
+  const p = document.getElementById('authPreloader');
+  if (p) p.style.display = 'none';
+}
+
+async function tryAutoLogin() {
+  const name = getCurrentUser();
+  if (!name) return false;
+
+  // Есть сохранённое имя — пробуем войти автоматически
+  showAuthPreloader();
+
+  // Оффлайн — сразу показываем тост и возвращаем форму
+  if (navigator.onLine === false) {
+    hideAuthPreloader();
+    showToast('Нет соединения с интернетом', 'warning', 4000);
+    return false;
+  }
+
+  let user = null;
+  try {
+    user = await fbGetUser(name);
+  } catch (e) {
+    user = null;
+  }
+
+  if (!user || user.blocked) {
+    // Профиль не найден или заблокирован — чистим и показываем форму
+    clearCurrentUser();
+    hideAuthPreloader();
+    return false;
+  }
+
+  // Всё ок — редирект по роли
+  if (user.role === 'admin') {
+    window.location.href = 'adminPage/adminPage.html';
+  } else {
+    window.location.href = 'dictionary/dictionary.html';
+  }
+  return true;
 }
 
 /* Обработка submit */
@@ -263,6 +309,10 @@ async function handleLogin(name, pass) {
 async function init() {
   applyTheme();
 
+  // Пробуем автологин — если получится, уйдём на редирект
+  const autoLoggedIn = await tryAutoLogin();
+  if (autoLoggedIn) return;
+
   document.getElementById('authForm').addEventListener('submit', authSubmitHandler);
   document.getElementById('authSwitch').addEventListener('click', () => {
     setAuthMode(authMode === 'login' ? 'register' : 'login');
@@ -311,17 +361,6 @@ init();
 /* ============================================================
    PWA — Service Worker
    ============================================================ */
-
-// Автоматическая перезагрузка страницы, когда активируется новый SW.
-// Защита от цикла: refreshed = true, чтобы reload не запускался повторно.
-let _swRefreshed = false;
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_swRefreshed) return;
-    _swRefreshed = true;
-    window.location.reload();
-  });
-}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
