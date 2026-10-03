@@ -1,4 +1,15 @@
 
+/* Последнее имя пользователя (не удаляется при выходе) */
+const LAST_USER_KEY = 'wordbook_last_user';
+
+function getLastUser() {
+  try { return localStorage.getItem(LAST_USER_KEY) || ''; } catch (e) { return ''; }
+}
+function setLastUser(name) {
+  if (!name) return;
+  try { localStorage.setItem(LAST_USER_KEY, name); } catch (e) {}
+}
+
 function resetPasswordEyes() {
   document.querySelectorAll('.auth-eye').forEach(btn => {
     btn.classList.remove('showing');
@@ -120,7 +131,7 @@ function setAuthRole(role) {
     nameLabel.textContent = 'Имя';
     nameInput.type = 'text';
     nameInput.placeholder = '';
-    nameInput.value = '';
+    nameInput.value = getLastUser();
     document.getElementById('authPass').value = '';
     clearAuthErrors();
     setAuthMode(authMode);
@@ -278,6 +289,7 @@ async function handleRegister(name, pass) {
   });
 
   setCurrentUser(name);
+  setLastUser(name);
   window.location.href = 'dictionary/dictionary.html';
 }
 
@@ -311,6 +323,7 @@ async function handleLogin(name, pass) {
   }
 
   setCurrentUser(user.name);
+  setLastUser(user.name);
   if (user.role === 'admin') {
     window.location.href = 'adminPage/adminPage.html';
   } else {
