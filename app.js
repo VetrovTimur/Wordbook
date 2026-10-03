@@ -2,6 +2,19 @@
 /* Последнее имя пользователя (не удаляется при выходе) */
 const LAST_USER_KEY = 'wordbook_last_user';
 
+/* Запомнить меня */
+const REMEMBER_ME_KEY = 'wordbook_remember_me';
+
+function getRememberMe() {
+  try {
+    const v = localStorage.getItem(REMEMBER_ME_KEY);
+    return v === null ? true : v === '1';
+  } catch (e) { return true; }
+}
+function setRememberMe(val) {
+  try { localStorage.setItem(REMEMBER_ME_KEY, val ? '1' : '0'); } catch (e) {}
+}
+
 function getLastUser() {
   try { return localStorage.getItem(LAST_USER_KEY) || ''; } catch (e) { return ''; }
 }
@@ -94,10 +107,13 @@ function setAuthMode(mode) {
     confirmField.hidden = false;
     if (passHint) passHint.hidden = false;
   }
-  clearAuthErrors();
+    clearAuthErrors();
   document.getElementById('authConfirm').value = '';
 
   resetPasswordEyes();
+
+  const remWrap1 = document.getElementById('authRememberWrap');
+  if (remWrap1) remWrap1.hidden = (authRole === 'admin' || mode === 'register');
 }
 
 function setAuthRole(role) {
@@ -137,7 +153,10 @@ function setAuthRole(role) {
     setAuthMode(authMode);
   }
 
-  resetPasswordEyes()
+   resetPasswordEyes();
+
+  const remWrap2 = document.getElementById('authRememberWrap');
+  if (remWrap2) remWrap2.hidden = (role === 'admin' || authMode === 'register');
 }
 
 /* ============================================================
@@ -288,7 +307,8 @@ async function handleRegister(name, pass) {
     words: [],
   });
 
-  setCurrentUser(name);
+    if (getRememberMe()) setCurrentUser(name);
+  else clearCurrentUser();
   setLastUser(name);
   window.location.href = 'dictionary/dictionary.html';
 }
@@ -322,7 +342,8 @@ async function handleLogin(name, pass) {
     return;
   }
 
-  setCurrentUser(user.name);
+    if (getRememberMe()) setCurrentUser(user.name);
+  else clearCurrentUser();
   setLastUser(user.name);
   if (user.role === 'admin') {
     window.location.href = 'adminPage/adminPage.html';
@@ -388,6 +409,15 @@ async function init() {
       input.focus();
     });
   });
+
+  const remEl = document.getElementById('authRemember');
+  if (remEl) {
+    remEl.checked = getRememberMe();
+    remEl.addEventListener('change', () => {
+      setRememberMe(remEl.checked);
+      if (!remEl.checked) clearCurrentUser();
+    });
+  }
 
   setAuthRole('user');
   setTimeout(() => {

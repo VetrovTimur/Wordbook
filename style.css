@@ -326,3 +326,28 @@
   .auth-eye svg { width: 16px; height: 16px; }
   .auth-input-wrap input { padding-right: 30px; }
 }
+
+/* ============ Remember me ============ */
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-style: italic;
+  letter-spacing: 0.2px;
+}
+.auth-remember[hidden] { display: none; }
+.auth-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
