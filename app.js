@@ -1,3 +1,13 @@
+
+function resetPasswordEyes() {
+  document.querySelectorAll('.auth-eye').forEach(btn => {
+    btn.classList.remove('showing');
+    const id = btn.getAttribute('data-eye-target');
+    const input = document.getElementById(id);
+    if (input) input.type = 'password';
+  });
+}
+
 /* Тема */
 const AUTH_THEME_KEY = 'wordbook_auth_theme';
 
@@ -75,6 +85,8 @@ function setAuthMode(mode) {
   }
   clearAuthErrors();
   document.getElementById('authConfirm').value = '';
+
+  resetPasswordEyes();
 }
 
 function setAuthRole(role) {
@@ -113,6 +125,8 @@ function setAuthRole(role) {
     clearAuthErrors();
     setAuthMode(authMode);
   }
+
+  resetPasswordEyes()
 }
 
 /* ============================================================
@@ -345,6 +359,20 @@ async function init() {
         }
         authSubmitHandler(new Event('submit'));
       }
+    });
+  });
+
+    document.querySelectorAll('.auth-eye').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = btn.getAttribute('data-eye-target');
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const wasShowing = input.type === 'text';
+      input.type = wasShowing ? 'password' : 'text';
+      btn.classList.toggle('showing', !wasShowing);
+      btn.setAttribute('aria-label', wasShowing ? 'Показать пароль' : 'Скрыть пароль');
+      input.focus();
     });
   });
 

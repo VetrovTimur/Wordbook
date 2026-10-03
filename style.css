@@ -285,3 +285,44 @@
   font-style: italic;
   opacity: 0.75;
 }
+
+/* ============ Eye (показать пароль) ============ */
+.auth-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.auth-input-wrap input {
+  padding-right: 34px;
+}
+
+.auth-eye {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: color 0.15s ease;
+  font-family: inherit;
+}
+.auth-eye:hover { color: var(--accent); }
+.auth-eye:active { transform: translateY(-50%) scale(0.92); }
+.auth-eye svg { width: 18px; height: 18px; display: block; }
+
+.auth-eye .eye-closed { display: none; }
+.auth-eye.showing .eye-open { display: none; }
+.auth-eye.showing .eye-closed { display: block; }
+
+@media (max-width: 640px) {
+  .auth-eye { width: 26px; height: 26px; }
+  .auth-eye svg { width: 16px; height: 16px; }
+  .auth-input-wrap input { padding-right: 30px; }
+}
