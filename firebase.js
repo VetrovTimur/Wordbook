@@ -46,11 +46,12 @@ async function fbFetch(promiseFactory, errorContext, fallback = null, options = 
       e.code === 'deadline-exceeded' ||
       e.code === 'cancelled'
     );
-    if (isTransient) return fallback;
+      if (isTransient) return fallback;
 
     showToast(errorContext, 'error');
     return fallback;
   }
+}
 
 /* Хэш пароля: SHA-256 с солью имени пользователя.
    Формат хранения: "sha256:<64 hex>". */

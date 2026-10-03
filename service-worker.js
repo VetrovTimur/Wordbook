@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wordbook-v18';
+const CACHE_VERSION = 'wordbook-v20';
 
 const STATIC_ASSETS = [
   './',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   './style.css',
   './app.js',
   './firebase.js',
+  './pwa-install.js', 
   './dictionary/dictionary.html',
   './dictionary/dictionary.css',
   './dictionary/dictionary.js',
