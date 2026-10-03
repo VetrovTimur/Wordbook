@@ -1181,6 +1181,7 @@ async function initApp() {
   });
 
   if (!auth.currentUser) {
+    try { localStorage.removeItem(CURRENT_USER_KEY); } catch (e) {}
     window.location.href = '../index.html';
     return;
   }
@@ -1195,6 +1196,8 @@ async function initApp() {
     email: auth.currentUser.email,
     role: 'admin',
   };
+
+  try { localStorage.setItem(CURRENT_USER_KEY, currentUserData.name); } catch (e) {}
 
   document.getElementById('adminName').textContent = currentUserData.name;
   document.getElementById('adminInitial').textContent = (currentUserData.name[0] || 'A').toUpperCase();
