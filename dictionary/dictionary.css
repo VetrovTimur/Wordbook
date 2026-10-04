@@ -1321,3 +1321,20 @@ body.view-stats #exportWordsBtn { display: none !important; }
 @media (max-width: 640px) {
   .word-pos { font-size: 9px; padding: 0 4px; margin-left: 4px; }
 }
+
+.word-tr-ai {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--paper);
+  background: var(--gold);
+  padding: 1px 5px;
+  border-radius: 5px;
+  margin-left: 5px;
+  vertical-align: middle;
+  font-style: normal;
+  font-family: inherit;
+  line-height: 1.2;
+  opacity: 0.85;
+}

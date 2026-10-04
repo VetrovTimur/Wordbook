@@ -83,6 +83,7 @@ let highlightTimer = null;
 let saveDebounceTimer = null;
 let trFetchTimer = null;
 let trAutoFilled = false;
+let trIsAI = false;
 let trRuFetchTimer = null;
 let enAutoFilled = false;
 
@@ -713,7 +714,8 @@ function renderWords() {
 
   container.innerHTML = pageWords.map(w => {
     const cls = w.id === lastAddedWordId ? 'word-row highlight' : 'word-row';
-    const trCell = w.tr ? `<span class="word-tr">${escapeHtml(w.tr)}</span>` : `<span class="word-tr empty">нет данных</span>`;
+        const aiBadge = w.trAI ? `<span class="word-tr-ai" title="Транскрипция от AI, может быть неточной">AI</span>` : '';
+    const trCell = w.tr ? `<span class="word-tr">${escapeHtml(w.tr)}${aiBadge}</span>` : `<span class="word-tr empty">нет данных</span>`;
     const posBadge = w.pos && POS_SHORT[w.pos]
       ? `<span class="word-pos">${escapeHtml(POS_SHORT[w.pos])}</span>`
       : '';
@@ -1081,7 +1083,8 @@ function openAddWordModal() {
   if (!state.sections.length) return;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
   if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
-  trAutoFilled = false;
+    trAutoFilled = false;
+  trIsAI = false;
   enAutoFilled = false;
   editingWordId = null;
   modalTitle.textContent = 'Новое слово';
@@ -1098,7 +1101,8 @@ function openEditWordModal(wordId) {
   if (!w) return;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
   if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
-  trAutoFilled = false;
+    trAutoFilled = false;
+  trIsAI = w.trAI === true;
   enAutoFilled = false;
   editingWordId = wordId;
   modalTitle.textContent = 'Редактировать';
@@ -1116,7 +1120,8 @@ function closeWordModal() {
   editingWordId = null;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
   if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
-  trAutoFilled = false;
+   trAutoFilled = false;
+  trIsAI = false;
   enAutoFilled = false;
 }
 document.getElementById('addWordBtn').addEventListener('click', openAddWordModal);
@@ -1141,6 +1146,7 @@ inRu.addEventListener('input', () => {
 });
 inTr.addEventListener('input', () => {
   trAutoFilled = false;
+  trIsAI = false;
 });
 
 function handleSaveWord() {
@@ -1158,12 +1164,12 @@ function handleSaveWord() {
   if (!sectionId) return;
   if (hasError) { (inRu.classList.contains('error') ? inRu : inEn).focus(); return; }
 
-  if (editingWordId) {
+    if (editingWordId) {
     const w = state.words.find(x => x.id === editingWordId);
-    if (w) { w.en = en; w.tr = tr; w.ru = ru; w.sectionId = sectionId; w.pos = pos; }
+    if (w) { w.en = en; w.tr = tr; w.ru = ru; w.sectionId = sectionId; w.pos = pos; w.trAI = tr ? trIsAI : false; }
     lastAddedWordId = null;
     } else {
-    const newWord = { id: uid(), sectionId, en, tr, ru, pos };
+    const newWord = { id: uid(), sectionId, en, tr, ru, pos, trAI: tr ? trIsAI : false };
     state.words.push(newWord);
     lastAddedWordId = newWord.id;
     shuffledOrder = [];
@@ -1258,23 +1264,46 @@ async function fetchTranscription(word) {
   const w = word.trim().toLowerCase();
   if (w.length < 2) return null;
 
-  const url = WORKER_URL + '?word=' + encodeURIComponent(w);
-
+  // 1. Основная попытка — через wordbook (там свой AI-фолбэк внутри)
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 30000);
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(WORKER_URL + '?word=' + encodeURIComponent(w), { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length) {
+        for (const entry of data) {
+          const isAI = entry.ai === true;
+          if (entry.phonetic) return { tr: entry.phonetic, ai: isAI };
+          if (Array.isArray(entry.phonetics)) {
+            for (const p of entry.phonetics) {
+              if (p.text) return { tr: p.text, ai: isAI };
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 2. Фронт-фолбэк — дёргаем AI напрямую
+  return fetchPhoneticAI(w);
+}
+
+async function fetchPhoneticAI(word) {
+  const url = TRANSLATE_WORKER_URL + '?mode=phonetic&word=' + encodeURIComponent(word);
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     const res = await fetch(url, { signal: ctrl.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     const data = await res.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    for (const entry of data) {
-      if (entry.phonetic) return entry.phonetic;
-      if (Array.isArray(entry.phonetics)) {
-        for (const p of entry.phonetics) {
-          if (p.text) return p.text;
-        }
+    if (data && typeof data.phonetic === 'string' && data.phonetic.trim()) {
+      if (data.word && data.word.toLowerCase() !== word.toLowerCase()) {
+        return null;
       }
+      return { tr: data.phonetic.trim(), ai: true };
     }
     return null;
   } catch (e) {
@@ -1289,20 +1318,12 @@ function scheduleTranscriptionFetch() {
     if (!en) return;
     if (inTr.value.trim() && !trAutoFilled) return;
 
-    let tr = await fetchTranscription(en);
+    const result = await fetchTranscription(en);
 
-    // Ретрай: если первый раз не получилось — пробуем ещё раз через 1.5 сек
-    if (!tr) {
-      await new Promise(r => setTimeout(r, 1500));
-      // проверяем, что за это время юзер не закрыл модалку и не поменял слово
-      if (inEn.value.trim() === en && (!inTr.value.trim() || trAutoFilled)) {
-        tr = await fetchTranscription(en);
-      }
-    }
-
-    if (tr && (!inTr.value.trim() || trAutoFilled)) {
-      inTr.value = tr;
+    if (result && (!inTr.value.trim() || trAutoFilled)) {
+      inTr.value = result.tr;
       trAutoFilled = true;
+      trIsAI = result.ai;
     }
   }, 600);
 }
@@ -1342,10 +1363,11 @@ async function runTranscriptionQueue() {
     if (editingWordId === w.id) continue;
 
     trBgAttempts[w.id] = (trBgAttempts[w.id] || 0) + 1;
-    const tr = await fetchTranscription(w.en);
+    const result = await fetchTranscription(w.en);
 
-    if (tr) {
-      w.tr = tr;
+    if (result && result.tr) {
+      w.tr = result.tr;
+      w.trAI = result.ai === true;
       delete trBgAttempts[w.id];
       changed = true;
     } else if (trBgAttempts[w.id] >= TR_BG_MAX) {
