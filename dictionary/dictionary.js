@@ -1264,30 +1264,27 @@ async function fetchTranscription(word) {
   const w = word.trim().toLowerCase();
   if (w.length < 2) return null;
 
-  // 1. Основная попытка — через wordbook (там свой AI-фолбэк внутри)
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     const res = await fetch(WORKER_URL + '?word=' + encodeURIComponent(w), { signal: ctrl.signal });
     clearTimeout(timer);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length) {
-        for (const entry of data) {
-          const isAI = entry.ai === true;
-          if (entry.phonetic) return { tr: entry.phonetic, ai: isAI };
-          if (Array.isArray(entry.phonetics)) {
-            for (const p of entry.phonetics) {
-              if (p.text) return { tr: p.text, ai: isAI };
-            }
-          }
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    for (const entry of data) {
+      const isAI = entry.ai === true;
+      if (entry.phonetic) return { tr: entry.phonetic, ai: isAI };
+      if (Array.isArray(entry.phonetics)) {
+        for (const p of entry.phonetics) {
+          if (p.text) return { tr: p.text, ai: isAI };
         }
       }
     }
-  } catch (e) {}
-
-  // 2. Фронт-фолбэк — дёргаем AI напрямую
-  return fetchPhoneticAI(w);
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function fetchPhoneticAI(word) {
@@ -2282,20 +2279,17 @@ async function initApp() {
   }
   markTodayVisited();
 
-    // 1. Разогреваем оба воркера при заходе
+    // Warmup только для dictionaryapi (wordbook)
   const WARMUP_WORDS = ['hello', 'cat', 'dog', 'house', 'book', 'love', 'time', 'day', 'man', 'woman', 'tree', 'water', 'fire', 'food', 'city', 'night', 'morning', 'friend', 'school', 'work'];
   WARMUP_WORDS.forEach((w, i) => {
     setTimeout(() => {
       fetch(WORKER_URL + '?word=' + encodeURIComponent(w)).catch(() => {});
-      fetch(TRANSLATE_WORKER_URL + '?mode=phonetic&word=' + encodeURIComponent(w)).catch(() => {});
     }, i * 350);
   });
 
-  // 2. Фронт-пинг: пока страница открыта, держим воркеры горячими
   if (window.__wbKeepAlive) clearInterval(window.__wbKeepAlive);
   window.__wbKeepAlive = setInterval(() => {
     fetch(WORKER_URL + '?word=hello').catch(() => {});
-    fetch(TRANSLATE_WORKER_URL + '?mode=phonetic&word=hello').catch(() => {});
   }, 25000);
 
   render();
