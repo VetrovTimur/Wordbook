@@ -202,18 +202,42 @@ function renderGoalCard() {
 
 function speak(text, lang, btnEl) {
   if (!('speechSynthesis' in window) || !text) return;
+
   try { window.speechSynthesis.cancel(); } catch (e) {}
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = lang === 'en' ? 'en-US' : 'ru-RU';
-  utt.rate = 0.9;
-  if (btnEl) {
-    btnEl.classList.add('speaking');
-    const stop = () => btnEl.classList.remove('speaking');
-    utt.onend = stop; utt.onerror = stop;
+
+  // Выбираем voice явно — иначе Chrome на Windows молчит,
+  // если системная раскладка не совпадает с языком текста
+  function pickVoice(targetLang) {
+    const voices = window.speechSynthesis.getVoices() || [];
+    const primary = targetLang.split('-')[0]; // en / ru
+    // Сначала точное совпадение (en-US), потом просто по языку (en)
+    return voices.find(v => v.lang === targetLang)
+        || voices.find(v => v.lang.replace('_','-') === targetLang)
+        || voices.find(v => v.lang.startsWith(primary))
+        || null;
   }
-  try { window.speechSynthesis.speak(utt); } catch (e) {
-    if (btnEl) btnEl.classList.remove('speaking');
-  }
+
+  setTimeout(() => {
+    const utt = new SpeechSynthesisUtterance(text);
+    const targetLang = lang === 'en' ? 'en-US' : 'ru-RU';
+    utt.lang = targetLang;
+
+    const voice = pickVoice(targetLang);
+    if (voice) utt.voice = voice;
+
+    utt.rate = 0.9;
+
+    if (btnEl) {
+      btnEl.classList.add('speaking');
+      const stop = () => btnEl.classList.remove('speaking');
+      utt.onend = stop;
+      utt.onerror = stop;
+    }
+
+    try { window.speechSynthesis.speak(utt); } catch (e) {
+      if (btnEl) btnEl.classList.remove('speaking');
+    }
+  }, 50);
 }
 
 function shuffleArray(arr) {
