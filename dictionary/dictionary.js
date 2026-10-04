@@ -43,7 +43,7 @@ const CAL_DAYS_AFTER = 10;
 const PRELOADER_MIN_TIME = 1000;
 
 const TRANSLATE_WORKER_URL = 'https://wordbook-translate.timurworkvetrov.workers.dev/';
-const TR_HINT_KEY_PREFIX = 'wordbook_hint_shown_v2_';
+const TR_HINT_KEY_PREFIX = 'wordbook_hint_shown_v3_';
 
 const POS_LABELS = {
   noun: 'Существительное', verb: 'Глагол', adj: 'Прилагательное',
@@ -2066,10 +2066,15 @@ document.getElementById('menuShare').addEventListener('click', (e) => {
    [27] ЧТО НОВОГО
    ============================================================ */
 
-const UPDATES_VERSION = 4;
-const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_';
+const UPDATES_VERSION = 5;
+const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_v2_';
 
 const UPDATES = [
+  /* ── Версия 5 (новые) ── */
+  { type: 'feature', icon: 'mic',    title: 'Транскрипция — всегда',        text: 'Раньше у редких слов было «НЕТ ДАННЫХ». Теперь Wordbook сам генерирует произношение — оно будет у каждого слова.' },
+  { type: 'feature', icon: 'tag',    title: 'AI-транскрипция с пометкой',   text: 'Рядом с такими транскрипциями стоит бейдж AI — она сгенерирована, а не взята из словаря. Если что-то не так — можно поправить руками.' },
+  { type: 'fix',     icon: 'volume', title: 'Озвучка английского',          text: 'Починили воспроизведение английских слов — раньше они иногда молчали, если раскладка клавиатуры была переключена на русский.' },
+
    /* ── Версия 4 (новые) ── */
   { type: 'feature', icon: 'globe',  title: 'Пиши по-русски — получишь перевод',  text: 'Вводите слово по-русски — Wordbook сам подставит английский перевод, транскрипцию и часть речи. Первый запрос может занять 20–30 секунд, дальше — быстрее.' },
   { type: 'feature', icon: 'tag',    title: 'Часть речи — автоматически',         text: 'Wordbook определяет, существительное это, глагол или прилагательное — видно бейджем прямо в таблице. Можно поправить руками.' },
