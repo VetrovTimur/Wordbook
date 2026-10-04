@@ -22,7 +22,7 @@
    [19] Модалка слова
    [20] Авто-перевод RU → EN
    [21] Транскрипция
-   [22] ФОНОВОЕ ДОЗАПОЛНЕНИЕ ТРАНСКРИПЦИИ
+   [22] ФОНОВОЕ ДОЗАПОЛНЕНИЕ ТРАНСКРИПЦИИ - удалил (полностю, впизду)
    [23] Импорт слов
    [24] Экспорт CSV
    [25] Обратная связь
@@ -1173,7 +1173,6 @@ function handleSaveWord() {
     lastAddedWordId = newWord.id;
     shuffledOrder = [];
     markWordAdded(1);
-    if (!tr) kickTranscriptionQueue(newWord.id);
   }
   saveState();
   closeWordModal();
@@ -1289,74 +1288,22 @@ function scheduleTranscriptionFetch() {
     if (!en) return;
     if (inTr.value.trim() && !trAutoFilled) return;
 
-    const result = await fetchTranscription(en);
+    const delays = [0, 1500, 3500];
+    let result = null;
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
+      if (inEn.value.trim() !== en) return;
+      if (inTr.value.trim() && !trAutoFilled) return;
+      result = await fetchTranscription(en);
+      if (result && result.tr) break;
+    }
 
-    if (result && (!inTr.value.trim() || trAutoFilled)) {
+    if (result && result.tr && (!inTr.value.trim() || trAutoFilled)) {
       inTr.value = result.tr;
       trAutoFilled = true;
       trIsAI = result.ai;
     }
   }, 600);
-}
-
-/* ============================================================
-   [22] ФОНОВОЕ ДОЗАПОЛНЕНИЕ ТРАНСКРИПЦИИ
-   ============================================================ */
-
-const TR_BG_MAX = 6;
-const TR_BG_START_DELAY = 3000;
-const TR_BG_INTERVAL = 15000;
-
-let trBgTimer = null;
-const trBgAttempts = {};
-
-function kickTranscriptionQueue(wordId) {
-  trBgAttempts[wordId] = 0;
-  if (!trBgTimer) {
-    trBgTimer = setTimeout(runTranscriptionQueue, TR_BG_START_DELAY);
-  }
-}
-
-async function runTranscriptionQueue() {
-  trBgTimer = null;
-
-  const need = state.words.filter(w =>
-    !w.tr &&
-    trBgAttempts[w.id] !== undefined &&
-    trBgAttempts[w.id] < TR_BG_MAX
-  );
-
-  if (!need.length) return;
-
-  let changed = false;
-
-  for (const w of need) {
-    if (editingWordId === w.id) continue;
-
-    trBgAttempts[w.id] = (trBgAttempts[w.id] || 0) + 1;
-    const result = await fetchTranscription(w.en);
-
-    if (result && result.tr) {
-      w.tr = result.tr;
-      w.trAI = result.ai === true;
-      delete trBgAttempts[w.id];
-      changed = true;
-    } else if (trBgAttempts[w.id] >= TR_BG_MAX) {
-      delete trBgAttempts[w.id];
-    }
-  }
-
-  if (changed) {
-    saveState();
-    if (state.view === 'dictionary') renderWords();
-  }
-
-  const stillNeed = state.words.some(w =>
-    !w.tr && trBgAttempts[w.id] !== undefined && trBgAttempts[w.id] < TR_BG_MAX
-  );
-  if (stillNeed) {
-    trBgTimer = setTimeout(runTranscriptionQueue, TR_BG_INTERVAL);
-  }
 }
 
 /* ============================================================
