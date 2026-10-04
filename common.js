@@ -27,6 +27,7 @@ function sanitizeSectionName(raw) {
   name = name.replace(/[^\p{L}\p{N}\s()]/gu, ' ');
   name = name.replace(/\s+/g, ' ').trim();
   if (name.length > 50) name = name.slice(0, 50).trim();
+  if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
   return name;
 }
 

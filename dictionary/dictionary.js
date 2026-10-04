@@ -20,15 +20,16 @@
    [17] Обработчики: меню, выход
    [18] Обработчики: клавиши, поиск, shuffle, список слов
    [19] Модалка слова
-   [20] Транскрипция
-   [21] Импорт слов
-   [22] Экспорт CSV
-   [23] Обратная связь
-   [24] Поделиться
-   [25] Что нового
-   [26] Инициализация и прелоадер
-   [27] Смена пароля
-   [28] Модалка «Цель дня»
+   [20] Авто-перевод RU → EN
+   [21] Транскрипция
+   [22] Импорт слов
+   [23] Экспорт CSV
+   [24] Обратная связь
+   [25] Поделиться
+   [26] Что нового
+   [27] Инициализация и прелоадер
+   [28] Смена пароля
+   [29] Модалка «Цель дня»
    ============================================================ */
 
 /* ============================================================
@@ -41,6 +42,7 @@ const CAL_DAYS_AFTER = 10;
 const PRELOADER_MIN_TIME = 1000;
 
 const WORKER_URL = 'https://wordbook.timurworkvetrov.workers.dev/';
+const TRANSLATE_WORKER_URL = 'https://wordbook-translate.timurworkvetrov.workers.dev/';
 const TR_HINT_KEY_PREFIX = 'wordbook_tr_hint_shown_';
 
 const defaultState = {
@@ -69,6 +71,8 @@ let highlightTimer = null;
 let saveDebounceTimer = null;
 let trFetchTimer = null;
 let trAutoFilled = false;
+let trRuFetchTimer = null;
+let enAutoFilled = false;
 
 /* ============================================================
    [2] ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ + СОХРАНЕНИЕ
@@ -641,7 +645,7 @@ function renderAddSection() {
     const ok = document.getElementById('newSectionOk');
     const cancel = document.getElementById('newSectionCancel');
     const submit = () => {
-      const name = inp.value.trim();
+      const name = sanitizeSectionName(inp.value.trim());
       if (!name) { inp.focus(); return; }
       if (state.sections.some(s => s.name.toLowerCase() === name.toLowerCase())) {
         inp.value = ''; inp.placeholder = 'Уже существует'; inp.focus(); return;
@@ -1054,20 +1058,24 @@ function resetErrors() {
 function openAddWordModal() {
   if (!state.sections.length) return;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
   trAutoFilled = false;
+  enAutoFilled = false;
   editingWordId = null;
   modalTitle.textContent = 'Новое слово';
   saveWordBtn.textContent = 'Добавить';
   inEn.value = ''; inTr.value = ''; inRu.value = '';
   resetErrors(); renderSectionSelect();
   wordModal.classList.add('show');
-  setTimeout(() => inEn.focus(), 60);
+  setTimeout(() => inRu.focus(), 60);
 }
 function openEditWordModal(wordId) {
   const w = state.words.find(x => x.id === wordId);
   if (!w) return;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
   trAutoFilled = false;
+  enAutoFilled = false;
   editingWordId = wordId;
   modalTitle.textContent = 'Редактировать';
   saveWordBtn.textContent = 'Сохранить';
@@ -1075,13 +1083,15 @@ function openEditWordModal(wordId) {
   resetErrors(); renderSectionSelect();
   document.getElementById('inSection').value = w.sectionId;
   wordModal.classList.add('show');
-  setTimeout(() => { inEn.focus(); inEn.select(); }, 60);
+  setTimeout(() => { inRu.focus(); inRu.select(); }, 60);
 }
 function closeWordModal() {
   wordModal.classList.remove('show');
   editingWordId = null;
   if (trFetchTimer) { clearTimeout(trFetchTimer); trFetchTimer = null; }
+  if (trRuFetchTimer) { clearTimeout(trRuFetchTimer); trRuFetchTimer = null; }
   trAutoFilled = false;
+  enAutoFilled = false;
 }
 document.getElementById('addWordBtn').addEventListener('click', openAddWordModal);
 document.getElementById('cancelWord').addEventListener('click', closeWordModal);
@@ -1094,12 +1104,14 @@ inEn.addEventListener('input', () => {
   const cleaned = inEn.value.replace(EN_RE, '');
   if (cleaned !== inEn.value) inEn.value = cleaned;
   if (cleaned.trim()) { errEn.textContent = ''; inEn.classList.remove('error'); }
+  enAutoFilled = false;
   scheduleTranscriptionFetch();
 });
 inRu.addEventListener('input', () => {
   const cleaned = inRu.value.replace(RU_RE, '');
   if (cleaned !== inRu.value) inRu.value = cleaned;
   if (cleaned.trim()) { errRu.textContent = ''; inRu.classList.remove('error'); }
+  scheduleTranslationFetch();
 });
 inTr.addEventListener('input', () => {
   trAutoFilled = false;
@@ -1107,16 +1119,16 @@ inTr.addEventListener('input', () => {
 
 function handleSaveWord() {
   resetErrors();
-  const en = inEn.value.trim();
+  const en = inEn.value.trim().toLowerCase();
   const tr = inTr.value.trim();
-  const ru = inRu.value.trim();
+  const ru = inRu.value.trim().toLowerCase();
   const sectionId = document.getElementById('inSection').value;
 
   let hasError = false;
   if (!en) { errEn.textContent = 'Введите английское слово'; inEn.classList.add('error'); hasError = true; }
   if (!ru) { errRu.textContent = 'Введите русский перевод'; inRu.classList.add('error'); hasError = true; }
   if (!sectionId) return;
-  if (hasError) { (inEn.classList.contains('error') ? inEn : inRu).focus(); return; }
+  if (hasError) { (inRu.classList.contains('error') ? inRu : inEn).focus(); return; }
 
   if (editingWordId) {
     const w = state.words.find(x => x.id === editingWordId);
@@ -1154,7 +1166,54 @@ saveWordBtn.addEventListener('click', handleSaveWord);
 });
 
 /* ============================================================
-   [20] ТРАНСКРИПЦИЯ
+   [20] АВТО-ПЕРЕВОД RU → EN
+   ============================================================ */
+
+async function fetchTranslation(word) {
+  const w = String(word || '').trim();
+  if (w.length < 2) return null;
+
+  const url = TRANSLATE_WORKER_URL + '?word=' + encodeURIComponent(w);
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && typeof data.en === 'string' && data.en.trim()) {
+      return data.en.trim().toLowerCase();
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function scheduleTranslationFetch() {
+  if (trRuFetchTimer) clearTimeout(trRuFetchTimer);
+  trRuFetchTimer = setTimeout(async () => {
+    const ru = inRu.value.trim();
+    if (!ru) return;
+
+    // Юзер уже вписал что-то в «Английский» вручную — не трогаем
+    if (inEn.value.trim() && !enAutoFilled) return;
+
+    const en = await fetchTranslation(ru);
+    if (en && (!inEn.value.trim() || enAutoFilled)) {
+      inEn.value = en;
+      enAutoFilled = true;
+      errEn.textContent = '';
+      inEn.classList.remove('error');
+      // Запускаем транскрипцию для нового EN
+      scheduleTranscriptionFetch();
+    }
+  }, 600);
+}
+
+/* ============================================================
+   [21] ТРАНСКРИПЦИЯ
    ============================================================ */
 
 async function fetchTranscription(word) {
@@ -1200,7 +1259,7 @@ function scheduleTranscriptionFetch() {
 }
 
 /* ============================================================
-   [21] ИМПОРТ СЛОВ (paste + xlsx/csv)
+   [22] ИМПОРТ СЛОВ (paste + xlsx/csv)
    ============================================================ */
 
 const IMPORT_MAX = 100;
@@ -1270,9 +1329,9 @@ function parseRows2D(matrix) {
       if (isHeaderRow(parts)) continue;
     }
 
-    const en = (parts[0] || '').trim();
+    const en = (parts[0] || '').trim().toLowerCase();
     const tr = (parts[1] || '').trim();
-    const ru = (parts[2] || '').trim();
+    const ru = (parts[2] || '').trim().toLowerCase();
     const sectionRaw = (parts[3] || '').trim();
     const section = sectionRaw ? sanitizeSectionName(sectionRaw) : '';
 
@@ -1691,7 +1750,7 @@ if (dropzone) {
 document.getElementById('importConfirm').addEventListener('click', executeImport);
 
 /* ============================================================
-   [22] ЭКСПОРТ СЛОВ В CSV
+   [23] ЭКСПОРТ СЛОВ В CSV
    ============================================================ */
 
 function exportWordsToCSV() {
@@ -1754,7 +1813,7 @@ function exportWordsToCSV() {
 document.getElementById('exportWordsBtn').addEventListener('click', exportWordsToCSV);
 
 /* ============================================================
-   [23] ОБРАТНАЯ СВЯЗЬ
+   [24] ОБРАТНАЯ СВЯЗЬ
    ============================================================ */
 
 const FEEDBACK_MAX = 2000;
@@ -1844,7 +1903,7 @@ feedbackModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [24] Поделиться
+   [25] Поделиться
    ============================================================ */
 
 const SHARE_URL = 'https://vetrovtimur.github.io/Wordbook/';
@@ -1886,7 +1945,7 @@ document.getElementById('menuShare').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [25] ЧТО НОВОГО
+   [26] ЧТО НОВОГО
    ============================================================ */
 
 const UPDATES_VERSION = 3;
@@ -1999,7 +2058,7 @@ document.getElementById('whatsNewModal').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [26] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
+   [27] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
    ============================================================ */
 
 async function initApp() {
@@ -2104,7 +2163,7 @@ if (document.readyState === 'loading') {
 }
 
 /* ============================================================
-   [27] СМЕНА ПАРОЛЯ
+   [28] СМЕНА ПАРОЛЯ
    ============================================================ */
 
 const passwordModal = document.getElementById('passwordModal');
@@ -2233,7 +2292,7 @@ passwordModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [28] МОДАЛКА «ЦЕЛЬ ДНЯ»
+   [29] МОДАЛКА «ЦЕЛЬ ДНЯ»
    ============================================================ */
 
 const goalModal = document.getElementById('goalModal');
