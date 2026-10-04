@@ -1286,7 +1286,18 @@ function scheduleTranscriptionFetch() {
     const en = inEn.value.trim();
     if (!en) return;
     if (inTr.value.trim() && !trAutoFilled) return;
-    const tr = await fetchTranscription(en);
+
+    let tr = await fetchTranscription(en);
+
+    // Ретрай: если первый раз не получилось — пробуем ещё раз через 1.5 сек
+    if (!tr) {
+      await new Promise(r => setTimeout(r, 1500));
+      // проверяем, что за это время юзер не закрыл модалку и не поменял слово
+      if (inEn.value.trim() === en && (!inTr.value.trim() || trAutoFilled)) {
+        tr = await fetchTranscription(en);
+      }
+    }
+
     if (tr && (!inTr.value.trim() || trAutoFilled)) {
       inTr.value = tr;
       trAutoFilled = true;
