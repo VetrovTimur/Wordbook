@@ -2260,12 +2260,21 @@ async function initApp() {
   }
   markTodayVisited();
 
-  const WARMUP_WORDS = ['hello', 'cat', 'dog', 'house', 'book', 'love', 'time', 'day', 'man', 'woman'];
+    // 1. Разогреваем оба воркера при заходе
+  const WARMUP_WORDS = ['hello', 'cat', 'dog', 'house', 'book', 'love', 'time', 'day', 'man', 'woman', 'tree', 'water', 'fire', 'food', 'city', 'night', 'morning', 'friend', 'school', 'work'];
   WARMUP_WORDS.forEach((w, i) => {
     setTimeout(() => {
       fetch(WORKER_URL + '?word=' + encodeURIComponent(w)).catch(() => {});
-    }, i * 400);
+      fetch(TRANSLATE_WORKER_URL + '?mode=phonetic&word=' + encodeURIComponent(w)).catch(() => {});
+    }, i * 350);
   });
+
+  // 2. Фронт-пинг: пока страница открыта, держим воркеры горячими
+  if (window.__wbKeepAlive) clearInterval(window.__wbKeepAlive);
+  window.__wbKeepAlive = setInterval(() => {
+    fetch(WORKER_URL + '?word=hello').catch(() => {});
+    fetch(TRANSLATE_WORKER_URL + '?mode=phonetic&word=hello').catch(() => {});
+  }, 25000);
 
   render();
   renderUserMenu();
