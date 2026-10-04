@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wordbook-v28';
+const CACHE_VERSION = 'wordbook-v29';
 
 const STATIC_ASSETS = [
   './',
@@ -41,7 +41,6 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Внешние домены (Firebase, Google, воркер, CDN) — не трогаем
   const skipHosts = [
     'firestore', 'firebase', 'googleapis', 'gstatic',
     'workers.dev', 'sheetjs', 'jsdelivr', 'unpkg'
@@ -51,7 +50,6 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
 
-  // HTML — network-first (всегда свежая версия, фолбэк на кэш)
   const isHtml = req.headers.get('accept')?.includes('text/html')
     || url.pathname.endsWith('.html')
     || url.pathname.endsWith('/');
@@ -69,7 +67,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Остальное — cache-first
   event.respondWith(
     caches.match(req).then(cached => {
       if (cached) return cached;

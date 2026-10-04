@@ -43,7 +43,18 @@ const PRELOADER_MIN_TIME = 1000;
 
 const WORKER_URL = 'https://wordbook.timurworkvetrov.workers.dev/';
 const TRANSLATE_WORKER_URL = 'https://wordbook-translate.timurworkvetrov.workers.dev/';
-const TR_HINT_KEY_PREFIX = 'wordbook_tr_hint_shown_';
+const TR_HINT_KEY_PREFIX = 'wordbook_hint_shown_v2_';
+
+const POS_LABELS = {
+  noun: 'Существительное', verb: 'Глагол', adj: 'Прилагательное',
+  adv: 'Наречие', pron: 'Местоимение', prep: 'Предлог',
+  conj: 'Союз', interj: 'Междометие', num: 'Числительное', art: 'Артикль',
+};
+const POS_SHORT = {
+  noun: 'сущ.', verb: 'глаг.', adj: 'прил.', adv: 'нареч.',
+  pron: 'мест.', prep: 'предл.', conj: 'союз', interj: 'межд.',
+  num: 'числ.', art: 'арт.',
+};
 
 const defaultState = {
   theme: 'light',
@@ -696,11 +707,15 @@ function renderWords() {
   container.innerHTML = pageWords.map(w => {
     const cls = w.id === lastAddedWordId ? 'word-row highlight' : 'word-row';
     const trCell = w.tr ? `<span class="word-tr">${escapeHtml(w.tr)}</span>` : `<span class="word-tr empty">нет данных</span>`;
+    const posBadge = w.pos && POS_SHORT[w.pos]
+      ? `<span class="word-pos">${escapeHtml(POS_SHORT[w.pos])}</span>`
+      : '';
     return `
     <div class="${cls}" data-word-id="${escapeHtml(w.id)}">
       <div class="word-cell">
         <button class="speak-btn" type="button" data-speak="en" data-word-id="${escapeHtml(w.id)}" title="Прослушать">${speakerSvg()}</button>
         <span class="word-en">${escapeHtml(w.en)}</span>
+        ${posBadge}
       </div>
       <div class="word-cell">${trCell}</div>
       <div class="word-cell">
@@ -1065,6 +1080,8 @@ function openAddWordModal() {
   modalTitle.textContent = 'Новое слово';
   saveWordBtn.textContent = 'Добавить';
   inEn.value = ''; inTr.value = ''; inRu.value = '';
+  const posSel = document.getElementById('inPos');
+  if (posSel) posSel.value = '';
   resetErrors(); renderSectionSelect();
   wordModal.classList.add('show');
   setTimeout(() => inRu.focus(), 60);
@@ -1080,6 +1097,8 @@ function openEditWordModal(wordId) {
   modalTitle.textContent = 'Редактировать';
   saveWordBtn.textContent = 'Сохранить';
   inEn.value = w.en; inTr.value = w.tr || ''; inRu.value = w.ru;
+  const posSel = document.getElementById('inPos');
+  if (posSel) posSel.value = w.pos || '';
   resetErrors(); renderSectionSelect();
   document.getElementById('inSection').value = w.sectionId;
   wordModal.classList.add('show');
@@ -1123,6 +1142,8 @@ function handleSaveWord() {
   const tr = inTr.value.trim();
   const ru = inRu.value.trim().toLowerCase();
   const sectionId = document.getElementById('inSection').value;
+  const posSel = document.getElementById('inPos');
+  const pos = posSel ? posSel.value : '';
 
   let hasError = false;
   if (!en) { errEn.textContent = 'Введите английское слово'; inEn.classList.add('error'); hasError = true; }
@@ -1132,10 +1153,10 @@ function handleSaveWord() {
 
   if (editingWordId) {
     const w = state.words.find(x => x.id === editingWordId);
-    if (w) { w.en = en; w.tr = tr; w.ru = ru; w.sectionId = sectionId; }
+    if (w) { w.en = en; w.tr = tr; w.ru = ru; w.sectionId = sectionId; w.pos = pos; }
     lastAddedWordId = null;
   } else {
-    const newWord = { id: uid(), sectionId, en, tr, ru };
+    const newWord = { id: uid(), sectionId, en, tr, ru, pos };
     state.words.push(newWord);
     lastAddedWordId = newWord.id;
     shuffledOrder = [];
@@ -1165,6 +1186,7 @@ saveWordBtn.addEventListener('click', handleSaveWord);
   });
 });
 
+
 /* ============================================================
    [20] АВТО-ПЕРЕВОД RU → EN
    ============================================================ */
@@ -1177,13 +1199,17 @@ async function fetchTranslation(word) {
 
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     const res = await fetch(url, { signal: ctrl.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     const data = await res.json();
     if (data && typeof data.en === 'string' && data.en.trim()) {
-      return data.en.trim().toLowerCase();
+      const posRaw = typeof data.pos === 'string' ? data.pos : '';
+      return {
+        en: data.en.trim().toLowerCase(),
+        pos: POS_LABELS[posRaw] ? posRaw : '',
+      };
     }
     return null;
   } catch (e) {
@@ -1197,16 +1223,20 @@ function scheduleTranslationFetch() {
     const ru = inRu.value.trim();
     if (!ru) return;
 
-    // Юзер уже вписал что-то в «Английский» вручную — не трогаем
     if (inEn.value.trim() && !enAutoFilled) return;
 
-    const en = await fetchTranslation(ru);
-    if (en && (!inEn.value.trim() || enAutoFilled)) {
-      inEn.value = en;
+    const result = await fetchTranslation(ru);
+    if (result && (!inEn.value.trim() || enAutoFilled)) {
+      inEn.value = result.en;
       enAutoFilled = true;
       errEn.textContent = '';
       inEn.classList.remove('error');
-      // Запускаем транскрипцию для нового EN
+
+      const posSel = document.getElementById('inPos');
+      if (posSel && result.pos && !posSel.value) {
+        posSel.value = result.pos;
+      }
+
       scheduleTranscriptionFetch();
     }
   }, 600);
@@ -1304,7 +1334,39 @@ const HEADER_WORDS = [
   'transcription', 'транскрипция', 'tr',
   'russian', 'русский', 'ru', 'перевод',
   'section', 'раздел',
+  'pos', 'part of speech', 'part', 'speech', 'часть речи',
 ];
+
+const POS_INPUT_ALIASES = {
+  'сущ': 'noun', 'существительное': 'noun',
+  'глаг': 'verb', 'глагол': 'verb',
+  'прил': 'adj', 'прилагательное': 'adj',
+  'нареч': 'adv', 'наречие': 'adv',
+  'мест': 'pron', 'местоимение': 'pron',
+  'предл': 'prep', 'предлог': 'prep',
+  'союз': 'conj',
+  'межд': 'interj', 'междометие': 'interj',
+  'числ': 'num', 'числительное': 'num',
+  'арт': 'art', 'артикль': 'art',
+  'noun': 'noun', 'n': 'noun',
+  'verb': 'verb', 'v': 'verb',
+  'adj': 'adj', 'adjective': 'adj',
+  'adv': 'adv', 'adverb': 'adv',
+  'pron': 'pron', 'pronoun': 'pron',
+  'prep': 'prep', 'preposition': 'prep',
+  'conj': 'conj', 'conjunction': 'conj',
+  'interj': 'interj', 'interjection': 'interj',
+  'num': 'num', 'numeral': 'num',
+  'art': 'art', 'article': 'art',
+};
+
+function normalizePos(raw) {
+  if (!raw) return '';
+  const key = String(raw).toLowerCase().trim()
+    .replace(/\.$/, '')
+    .replace(/\s+/g, ' ');
+  return POS_INPUT_ALIASES[key] || '';
+}
 
 function isHeaderRow(parts) {
   const first = String(parts[0] || '').toLowerCase().trim();
@@ -1329,14 +1391,33 @@ function parseRows2D(matrix) {
       if (isHeaderRow(parts)) continue;
     }
 
-    const en = (parts[0] || '').trim().toLowerCase();
-    const tr = (parts[1] || '').trim();
-    const ru = (parts[2] || '').trim().toLowerCase();
-    const sectionRaw = (parts[3] || '').trim();
+    const cols = parts.length;
+    let en = '', tr = '', ru = '', pos = '', sectionRaw = '';
+
+    if (cols === 2) {
+      en = parts[0]; ru = parts[1];
+    } else if (cols === 3) {
+      en = parts[0]; tr = parts[1]; ru = parts[2];
+    } else if (cols === 4) {
+      en = parts[0]; tr = parts[1]; ru = parts[2];
+      const fourth = parts[3];
+      const asPos = normalizePos(fourth);
+      if (asPos) pos = asPos;
+      else sectionRaw = fourth;
+    } else {
+      en = parts[0]; tr = parts[1]; ru = parts[2];
+      pos = normalizePos(parts[3]);
+      sectionRaw = parts[4] || '';
+    }
+
+    en = en.trim().toLowerCase();
+    ru = ru.trim().toLowerCase();
+    tr = tr.trim();
+    sectionRaw = sectionRaw.trim();
     const section = sectionRaw ? sanitizeSectionName(sectionRaw) : '';
 
     if (!en || !ru) { errors++; continue; }
-    rows.push({ en, tr, ru, section });
+    rows.push({ en, tr, ru, pos, section });
   }
   return { rows, errors };
 }
@@ -1559,7 +1640,7 @@ function updateImportPreview() {
             <div class="import-preview-group-body">
               ${g.words.map(r => `
                 <div class="import-preview-row">
-                  <span class="ip-en">${escapeHtml(r.en)}</span>
+                  <span class="ip-en">${escapeHtml(r.en)}${r.pos ? ` <span class="ip-pos">${escapeHtml(POS_SHORT[r.pos] || r.pos)}</span>` : ''}</span>
                   <span class="ip-tr">${r.tr ? escapeHtml(r.tr) : '—'}</span>
                   <span class="ip-ru">${escapeHtml(r.ru)}</span>
                 </div>
@@ -1633,7 +1714,7 @@ async function executeImport() {
       sectionId = defaultSectionId;
     }
 
-    state.words.push({ id: uid(), sectionId, en: r.en, tr: r.tr, ru: r.ru });
+    state.words.push({ id: uid(), sectionId, en: r.en, tr: r.tr, ru: r.ru, pos: r.pos || '' });
 
     const done = i + 1;
     const pct = Math.round((done / total) * 100);
@@ -1773,14 +1854,14 @@ function exportWordsToCSV() {
   };
 
   const headers = isAll
-    ? ['english', 'transcription', 'russian', 'section']
-    : ['english', 'transcription', 'russian'];
+    ? ['english', 'transcription', 'russian', 'pos', 'section']
+    : ['english', 'transcription', 'russian', 'pos'];
 
   const lines = [headers.join(';')];
   const sectionMap = new Map(state.sections.map(s => [s.id, s.name]));
 
   for (const w of words) {
-    const row = [esc(w.en), esc(w.tr || ''), esc(w.ru)];
+    const row = [esc(w.en), esc(w.tr || ''), esc(w.ru), esc(w.pos || '')];
     if (isAll) row.push(esc(sectionMap.get(w.sectionId) || ''));
     lines.push(row.join(';'));
   }
@@ -1912,7 +1993,6 @@ const SHARE_TEXT = 'Попробуй Wordbook — личный словарь а
 async function shareApp() {
   const fullText = SHARE_TEXT + '\n' + SHARE_URL;
 
-  // 1) Системный шаринг (iOS Safari, Android Chrome, macOS Safari)
   if (navigator.share) {
     try {
       await navigator.share({
@@ -1922,18 +2002,14 @@ async function shareApp() {
       });
       return;
     } catch (e) {
-      // Юзер отменил — ничего не делаем.
-      // Или ошибка — падаем в fallback ниже.
       if (e && e.name === 'AbortError') return;
     }
   }
 
-  // 2) Fallback: копируем в буфер
   try {
     await navigator.clipboard.writeText(SHARE_URL);
     showToast('🔗 Ссылка скопирована', 'info', 3000);
   } catch (e) {
-    // 3) Совсем крайний случай — показываем ссылку в toast
     showToast(SHARE_URL, 'info', 6000);
   }
 }
@@ -1952,21 +2028,16 @@ const UPDATES_VERSION = 3;
 const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_';
 
 const UPDATES = [
-  /* ── Версия 3 (новые) ── */
   { type: 'feature', icon: 'key',    title: 'Заходите одним кликом',     text: 'Раньше Wordbook просил пароль каждый раз при заходе. Теперь — один раз вошли, и он помнит вас, пока вы сами не нажмёте «Выйти».' },
   { type: 'feature', icon: 'lock',   title: 'Чекбокс «Запомнить меня»',  text: 'Прямо на форме входа — новый переключатель. Хотите, чтобы Wordbook помнил вас — оставьте галку. Не хотите — снимите, и он не будет пускать без пароля.' },
   { type: 'feature', icon: 'star',   title: 'Поделиться с другом',       text: 'В меню появилась кнопка «Поделиться». Нажмите — и ссылка на Wordbook скопируется или откроется системное окно: WhatsApp, Telegram, куда угодно.' },
   { type: 'improve', icon: 'search', title: 'Показать пароль',           text: 'Забыли, что вводите? Нажмите на глазик справа от поля пароля — и увидите его. Нажмите ещё раз — снова скроется.' },
   { type: 'improve', icon: 'key',    title: 'Имя уже подставлено',       text: 'Wordbook запоминает, под кем вы заходили в прошлый раз, и сам подставляет имя в форму. Меньше печатать — быстрее войти.' },
-
-  /* ── Версия 2 ── */
   { type: 'feature', icon: 'download', title: 'Экспорт словаря в CSV',     text: 'Скачайте весь словарь или отдельный раздел — с колонкой «раздел».' },
   { type: 'feature', icon: 'target',   title: 'Цель дня',                  text: 'Ставьте цель по словам на день и следите за прогрессом. Дни, когда цель выполнена, отмечаются в календаре.' },
   { type: 'feature', icon: 'install',  title: 'Установка на телефон',      text: 'Wordbook теперь можно установить как приложение — иконка на главном экране.' },
   { type: 'feature', icon: 'key',      title: 'Смена пароля',              text: 'Меняйте пароль прямо из словаря — без перелогина и лишних шагов.' },
   { type: 'improve', icon: 'import',   title: 'Импорт с разделами',        text: 'Четвёртая колонка «раздел» в Excel — слова автоматически раскладываются по своим папкам.' },
-
-  /* ── Версия 1 ── */
   { type: 'feature', icon: 'chart',    title: 'Статистика занятий',        text: 'Серии заходов, лучший результат, дни с нами и пропуски — дневник ваших занятий.' },
   { type: 'feature', icon: 'import',   title: 'Импорт слов из Excel',      text: 'Вставьте список или загрузите файл .xlsx / .csv, до 100 слов за раз.' },
   { type: 'feature', icon: 'search',   title: 'Умный поиск',               text: 'Ищите по слову, переводу или транскрипции.' },

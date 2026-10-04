@@ -1281,3 +1281,43 @@ body.view-stats #exportWordsBtn { display: none !important; }
   margin-top: -14px;
 }
 .goal-modal-hint[hidden] { display: none; }
+
+/* ======================== ЧАСТЬ РЕЧИ ======================== */
+.word-pos {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0.3px;
+  color: var(--ink-3);
+  background: var(--paper-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ip-pos {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--paper-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 0 5px;
+  margin-left: 4px;
+  font-style: italic;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .word-pos { font-size: 9.5px; padding: 1px 5px; margin-left: 5px; }
+}
+@media (max-width: 640px) {
+  .word-pos { font-size: 9px; padding: 0 4px; margin-left: 4px; }
+}
