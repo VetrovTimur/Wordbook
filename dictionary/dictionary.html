@@ -65,6 +65,14 @@
                 </svg>
                 <span>Словарь</span>
                 </button>
+                 <button class="dropdown-item" id="menuTraining" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="5" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="2" y1="10" x2="22" y2="10"/>
+                        <line x1="7" y1="15" x2="12" y2="15"/>
+                    </svg>
+                    <span>Тренировка</span>
+                </button>
                 <button class="dropdown-item" id="menuGoal" type="button" role="menuitem">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"/>
@@ -434,6 +442,120 @@
                     <button class="btn-primary" type="button" id="importConfirm" disabled>Импортировать</button>
                 </div>
             </div>
+        </div>
+
+                <!-- Тренировка -->
+        <div class="training-overlay" id="trainingOverlay">
+
+            <!-- ЭКРАН 1: НАСТРОЙКА -->
+            <div class="train-screen" id="trainScreenSetup">
+                <button class="train-close" id="trainSetupClose" type="button" aria-label="Закрыть">×</button>
+                <div class="train-setup-inner">
+                    <h2 class="train-setup-title">Тренировка</h2>
+                    <p class="train-setup-sub">Выберите раздел, направление и количество карточек</p>
+
+                    <div class="train-field">
+                        <label for="trainSection">Раздел</label>
+                        <select id="trainSection"></select>
+                    </div>
+
+                    <div class="train-field">
+                        <label>Направление</label>
+                        <div class="train-dir-group">
+                            <label class="train-dir-btn">
+                                <input type="radio" name="trainDirection" value="ru-en" checked>
+                                <span>RU → ENG</span>
+                            </label>
+                            <label class="train-dir-btn">
+                                <input type="radio" name="trainDirection" value="en-ru">
+                                <span>ENG → RU</span>
+                            </label>
+                            <label class="train-dir-btn">
+                                <input type="radio" name="trainDirection" value="mix">
+                                <span>Микс</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="train-field">
+                        <label for="trainCount">
+                            Количество карточек
+                            <span class="train-count-val" id="trainCountVal">5</span>
+                        </label>
+                        <input type="range" id="trainCount" min="1" max="20" value="5" step="1">
+                        <div class="train-count-hint" id="trainCountHint">из 20 слов в разделе</div>
+                    </div>
+
+                    <div class="train-setup-warning" id="trainSetupWarning" hidden>
+                        В этом разделе нет слов.
+                    </div>
+
+                    <div class="train-setup-actions">
+                        <button class="btn-ghost" type="button" id="trainSetupCancel">Отмена</button>
+                        <button class="btn-primary" type="button" id="trainStartBtn">Начать</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ЭКРАН 2: КАРТОЧКА -->
+            <div class="train-screen train-screen-card" id="trainScreenCard" hidden>
+                <button class="train-close" id="trainExit" type="button" aria-label="Выйти">×</button>
+
+                <div class="train-progress">
+                    <div class="train-progress-text" id="trainProgressText">0 / 15</div>
+                    <div class="train-progress-bar">
+                        <div class="train-progress-fill" id="trainProgressFill"></div>
+                    </div>
+                </div>
+
+                <div class="train-card" id="trainCard">
+                    <div class="train-card-inner">
+                        <div class="train-card-face train-card-front">
+                            <div class="train-word" id="trainWordFront"></div>
+                            <div class="train-hint">Тапни, чтобы увидеть ответ</div>
+                        </div>
+                        <div class="train-card-face train-card-back">
+                            <div class="train-word" id="trainWordBack"></div>
+                            <div class="train-back-info" id="trainBackInfo">
+                                <span class="train-tr" id="trainTr"></span>
+                                <span class="train-tr-ai" id="trainTrAI" hidden>AI</span>
+                            </div>
+                            <div class="train-back-row">
+                                <span class="word-pos" id="trainPos" hidden></span>
+                                <button class="train-speak" id="trainSpeak" type="button" title="Прослушать">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="train-actions" id="trainActions" hidden>
+                    <button class="train-btn train-btn-wrong" type="button" id="trainWrong">
+                        <span>Не знаю</span>
+                    </button>
+                    <button class="train-btn train-btn-right" type="button" id="trainRight">
+                        <span>Знаю</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ЭКРАН 3: ИТОГ -->
+            <div class="train-screen train-screen-result" id="trainScreenResult" hidden>
+                <div class="train-result-inner">
+                    <div class="train-result-big" id="trainResultBig">12 / 15</div>
+                    <div class="train-result-percent" id="trainResultPercent">80%</div>
+                    <div class="train-result-time" id="trainResultTime"></div>
+                    <div class="train-result-actions">
+                        <button class="btn-ghost" type="button" id="trainResultChange">Изменить</button>
+                        <button class="btn-primary" type="button" id="trainResultAgain">Ещё раз</button>
+                    </div>
+                    <button class="train-result-close" type="button" id="trainResultClose">Закрыть</button>
+                </div>
+            </div>
+
         </div>
 
         <!-- Firebase SDK (compat) -->

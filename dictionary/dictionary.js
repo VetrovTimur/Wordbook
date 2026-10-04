@@ -31,6 +31,7 @@
    [28] Инициализация и прелоадер
    [29] Смена пароля
    [30] Модалка «Цель дня»
+   [31] ТРЕНИРОВКА
    ============================================================ */
 
 /* ============================================================
@@ -2508,4 +2509,354 @@ goalShow.addEventListener('change', () => {
 });
 goalCount.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); saveGoal(); }
+});
+
+
+/* ============================================================
+   [31] ТРЕНИРОВКА
+   ============================================================ */
+
+const training = {
+  queue: [],
+  current: null,
+  originalTotal: 0,
+  correct: 0,
+  wrong: 0,
+  retried: new Set(),
+  startTime: 0,
+  showing: false,
+  direction: 'ru-en',
+  settings: { sectionId: 'all', count: 5 }
+};
+
+function openTrainingModal() {
+  // Сброс состояния
+  training.queue = [];
+  training.current = null;
+  training.correct = 0;
+  training.wrong = 0;
+  training.retried = new Set();
+  training.showing = false;
+
+  // Заполнить разделы
+  const sel = document.getElementById('trainSection');
+  sel.innerHTML =
+    `<option value="all">Все слова</option>` +
+    state.sections.map(s =>
+      `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`
+    ).join('');
+
+  // Восстановить прошлые настройки, если есть
+  if (state.sections.some(s => s.id === training.settings.sectionId) || training.settings.sectionId === 'all') {
+    sel.value = training.settings.sectionId;
+  } else {
+    sel.value = 'all';
+  }
+  document.querySelectorAll('input[name="trainDirection"]').forEach(r => {
+    r.checked = (r.value === training.direction);
+  });
+
+  updateTrainSection();
+
+  // Восстановить count, если влезает
+  const slider = document.getElementById('trainCount');
+  const desired = training.settings.count || 5;
+  slider.value = Math.min(desired, parseInt(slider.max, 10) || 1);
+  updateTrainCountLabel();
+
+  document.getElementById('trainingOverlay').classList.add('show');
+  showTrainScreen('setup');
+}
+
+function closeTrainingModal() {
+  document.getElementById('trainingOverlay').classList.remove('show');
+  document.getElementById('trainCard').classList.remove('flipped');
+}
+
+function showTrainScreen(name) {
+  document.getElementById('trainScreenSetup').hidden = (name !== 'setup');
+  document.getElementById('trainScreenCard').hidden = (name !== 'card');
+  document.getElementById('trainScreenResult').hidden = (name !== 'result');
+}
+
+function updateTrainSection() {
+  const sel = document.getElementById('trainSection');
+  const sectionId = sel.value;
+  const total = sectionId === 'all'
+    ? state.words.length
+    : state.words.filter(w => w.sectionId === sectionId).length;
+
+  const slider = document.getElementById('trainCount');
+  const max = Math.max(1, total);
+  slider.max = max;
+
+  let val = parseInt(slider.value, 10) || 5;
+  if (val > max) val = max;
+  if (val < 1) val = 1;
+  slider.value = val;
+
+  const warn = document.getElementById('trainSetupWarning');
+  const startBtn = document.getElementById('trainStartBtn');
+
+  if (total === 0) {
+    slider.disabled = true;
+    startBtn.disabled = true;
+    warn.hidden = false;
+  } else {
+    slider.disabled = false;
+    startBtn.disabled = false;
+    warn.hidden = true;
+  }
+
+  updateTrainCountLabel(total);
+}
+
+function updateTrainCountLabel(total) {
+  if (typeof total !== 'number') {
+    const sel = document.getElementById('trainSection');
+    const sid = sel.value;
+    total = sid === 'all'
+      ? state.words.length
+      : state.words.filter(w => w.sectionId === sid).length;
+  }
+  const slider = document.getElementById('trainCount');
+  document.getElementById('trainCountVal').textContent = slider.value;
+  document.getElementById('trainCountHint').textContent =
+    `из ${total} ${plural(total, 'слова', 'слов', 'слов')} в разделе`;
+}
+
+function startTraining() {
+  const sectionId = document.getElementById('trainSection').value;
+  const direction = document.querySelector('input[name="trainDirection"]:checked').value;
+  const count = parseInt(document.getElementById('trainCount').value, 10) || 5;
+
+  training.settings = { sectionId, count };
+  training.direction = direction;
+
+  let pool = state.words;
+  if (sectionId !== 'all') pool = pool.filter(w => w.sectionId === sectionId);
+  if (!pool.length) return;
+
+  const shuffled = shuffleArray(pool).slice(0, count);
+
+  training.queue = shuffled.map(w => ({
+    word: w,
+    direction: direction === 'mix'
+      ? (Math.random() < 0.5 ? 'ru-en' : 'en-ru')
+      : direction
+  }));
+
+  training.originalTotal = training.queue.length;
+  training.correct = 0;
+  training.wrong = 0;
+  training.retried = new Set();
+  training.startTime = Date.now();
+  training.showing = false;
+
+  showTrainScreen('card');
+  nextTrainCard();
+}
+
+function nextTrainCard() {
+  if (!training.queue.length) {
+    showTrainResult();
+    return;
+  }
+  training.current = training.queue.shift();
+  renderTrainCard();
+  updateTrainProgress();
+}
+
+function renderTrainCard() {
+  const item = training.current;
+  if (!item) return;
+  const w = item.word;
+  const front = item.direction === 'ru-en' ? w.ru : w.en;
+  const back = item.direction === 'ru-en' ? w.en : w.ru;
+
+  document.getElementById('trainWordFront').textContent = front;
+  document.getElementById('trainWordBack').textContent = back;
+
+  const trWrap = document.getElementById('trainBackInfo');
+  const trEl = document.getElementById('trainTr');
+  const aiEl = document.getElementById('trainTrAI');
+
+  if (w.tr) {
+    trEl.textContent = w.tr;
+    aiEl.hidden = !w.trAI;
+    trWrap.hidden = false;
+  } else {
+    trWrap.hidden = true;
+  }
+
+  const posEl = document.getElementById('trainPos');
+  if (w.pos && POS_SHORT[w.pos]) {
+    posEl.textContent = POS_SHORT[w.pos];
+    posEl.hidden = false;
+  } else {
+    posEl.hidden = true;
+  }
+
+  document.getElementById('trainCard').classList.remove('flipped');
+  document.getElementById('trainActions').hidden = true;
+  training.showing = false;
+}
+
+function flipTrainCard() {
+  if (training.showing) return;
+  if (!training.current) return;
+  training.showing = true;
+  document.getElementById('trainCard').classList.add('flipped');
+  document.getElementById('trainActions').hidden = false;
+}
+
+function updateTrainProgress() {
+  const total = training.originalTotal || 1;
+  const pct = Math.min(100, Math.round((training.correct / total) * 100));
+  document.getElementById('trainProgressText').textContent =
+    `${training.correct} / ${training.originalTotal}`;
+  document.getElementById('trainProgressFill').style.width = pct + '%';
+}
+
+function trainAnswer(known) {
+  if (!training.current) return;
+  if (!training.showing) return;
+
+  const item = training.current;
+  const wordId = item.word.id;
+
+  if (known) {
+    training.correct++;
+  } else {
+    training.wrong++;
+    if (!training.retried.has(wordId)) {
+      // Первый раз "не знаю" — слово в конец очереди
+      training.retried.add(wordId);
+      training.queue.push(item);
+    }
+    // Второй раз — просто пропускаем
+  }
+
+  training.current = null;
+  nextTrainCard();
+}
+
+function showTrainResult() {
+  const total = training.originalTotal || 1;
+  const pct = Math.round((training.correct / total) * 100);
+
+  document.getElementById('trainResultBig').textContent =
+    `${training.correct} / ${training.originalTotal}`;
+  document.getElementById('trainResultPercent').textContent = pct + '%';
+
+  const elapsed = Math.round((Date.now() - training.startTime) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timeStr = mins > 0
+    ? `${mins} ${plural(mins, 'минута', 'минуты', 'минут')} ${secs} ${plural(secs, 'секунда', 'секунды', 'секунд')}`
+    : `${secs} ${plural(secs, 'секунда', 'секунды', 'секунд')}`;
+  document.getElementById('trainResultTime').textContent = 'Время: ' + timeStr;
+
+  showTrainScreen('result');
+}
+
+/* ---------- Обработчики тренировки ---------- */
+
+document.getElementById('menuTraining').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeUserDropdown();
+  openTrainingModal();
+});
+
+document.getElementById('trainSetupClose').addEventListener('click', closeTrainingModal);
+document.getElementById('trainSetupCancel').addEventListener('click', closeTrainingModal);
+
+document.getElementById('trainSection').addEventListener('change', () => {
+  const sel = document.getElementById('trainSection');
+  training.settings.sectionId = sel.value;
+  updateTrainSection();
+});
+
+document.getElementById('trainCount').addEventListener('input', () => {
+  updateTrainCountLabel();
+});
+
+document.getElementById('trainStartBtn').addEventListener('click', startTraining);
+
+document.getElementById('trainCard').addEventListener('click', () => {
+  flipTrainCard();
+});
+
+document.getElementById('trainSpeak').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!training.current) return;
+  const w = training.current.word;
+  if (w.en) speak(w.en, 'en', e.currentTarget);
+});
+
+document.getElementById('trainWrong').addEventListener('click', (e) => {
+  e.stopPropagation();
+  trainAnswer(false);
+});
+
+document.getElementById('trainRight').addEventListener('click', (e) => {
+  e.stopPropagation();
+  trainAnswer(true);
+});
+
+document.getElementById('trainExit').addEventListener('click', async () => {
+  if (training.correct + training.wrong > 0) {
+    const ok = await showConfirm(
+      'Прервать тренировку? Прогресс не сохранится.',
+      'Прервать?', 'Прервать'
+    );
+    if (!ok) return;
+  }
+  closeTrainingModal();
+});
+
+document.getElementById('trainResultAgain').addEventListener('click', () => {
+  startTraining();
+});
+
+document.getElementById('trainResultChange').addEventListener('click', () => {
+  showTrainScreen('setup');
+});
+
+document.getElementById('trainResultClose').addEventListener('click', () => {
+  closeTrainingModal();
+});
+
+/* ---------- Клавиатура ---------- */
+
+document.addEventListener('keydown', (e) => {
+  const overlay = document.getElementById('trainingOverlay');
+  if (!overlay || !overlay.classList.contains('show')) return;
+
+  const cardScreen = document.getElementById('trainScreenCard');
+  const isCardScreen = cardScreen && !cardScreen.hidden;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    document.getElementById('trainExit').click();
+    return;
+  }
+
+  if (!isCardScreen) return;
+
+  if (e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    if (!training.showing) flipTrainCard();
+    return;
+  }
+
+  if (training.showing) {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      trainAnswer(false);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      trainAnswer(true);
+    }
+  }
 });
