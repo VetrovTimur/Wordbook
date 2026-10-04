@@ -2067,10 +2067,13 @@ document.getElementById('menuShare').addEventListener('click', (e) => {
    [27] ЧТО НОВОГО
    ============================================================ */
 
-const UPDATES_VERSION = 5;
-const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_v2_';
+const UPDATES_VERSION = 6;
+const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_v3_';
 
 const UPDATES = [
+  /* ── Версия 6 (новые) ── */
+  { type: 'feature', icon: 'target', title: 'Тренировка слов',              text: 'Карточки для заучивания: выбираете раздел и направление, листаете слова, отмечаете «Знаю» или «Не знаю». Прогресс считается, слова, которые не знаете, повторяются.' },
+  
   /* ── Версия 5 (новые) ── */
   { type: 'feature', icon: 'mic',    title: 'Транскрипция — всегда',        text: 'Раньше у редких слов было «НЕТ ДАННЫХ». Теперь Wordbook сам генерирует произношение — оно будет у каждого слова.' },
   { type: 'feature', icon: 'tag',    title: 'AI-транскрипция с пометкой',   text: 'Рядом с такими транскрипциями стоит бейдж AI — она сгенерирована, а не взята из словаря. Если что-то не так — можно поправить руками.' },
