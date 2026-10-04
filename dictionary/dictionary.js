@@ -22,14 +22,15 @@
    [19] Модалка слова
    [20] Авто-перевод RU → EN
    [21] Транскрипция
-   [22] Импорт слов
-   [23] Экспорт CSV
-   [24] Обратная связь
-   [25] Поделиться
-   [26] Что нового
-   [27] Инициализация и прелоадер
-   [28] Смена пароля
-   [29] Модалка «Цель дня»
+   [22] ФОНОВОЕ ДОЗАПОЛНЕНИЕ ТРАНСКРИПЦИИ
+   [23] Импорт слов
+   [24] Экспорт CSV
+   [25] Обратная связь
+   [26] Поделиться
+   [27] Что нового
+   [28] Инициализация и прелоадер
+   [29] Смена пароля
+   [30] Модалка «Цель дня»
    ============================================================ */
 
 /* ============================================================
@@ -1161,12 +1162,13 @@ function handleSaveWord() {
     const w = state.words.find(x => x.id === editingWordId);
     if (w) { w.en = en; w.tr = tr; w.ru = ru; w.sectionId = sectionId; w.pos = pos; }
     lastAddedWordId = null;
-  } else {
+    } else {
     const newWord = { id: uid(), sectionId, en, tr, ru, pos };
     state.words.push(newWord);
     lastAddedWordId = newWord.id;
     shuffledOrder = [];
     markWordAdded(1);
+    if (!tr) kickTranscriptionQueue(newWord.id);
   }
   saveState();
   closeWordModal();
@@ -1306,7 +1308,66 @@ function scheduleTranscriptionFetch() {
 }
 
 /* ============================================================
-   [22] ИМПОРТ СЛОВ (paste + xlsx/csv)
+   [22] ФОНОВОЕ ДОЗАПОЛНЕНИЕ ТРАНСКРИПЦИИ
+   ============================================================ */
+
+const TR_BG_MAX = 6;
+const TR_BG_START_DELAY = 3000;
+const TR_BG_INTERVAL = 15000;
+
+let trBgTimer = null;
+const trBgAttempts = {};
+
+function kickTranscriptionQueue(wordId) {
+  trBgAttempts[wordId] = 0;
+  if (!trBgTimer) {
+    trBgTimer = setTimeout(runTranscriptionQueue, TR_BG_START_DELAY);
+  }
+}
+
+async function runTranscriptionQueue() {
+  trBgTimer = null;
+
+  const need = state.words.filter(w =>
+    !w.tr &&
+    trBgAttempts[w.id] !== undefined &&
+    trBgAttempts[w.id] < TR_BG_MAX
+  );
+
+  if (!need.length) return;
+
+  let changed = false;
+
+  for (const w of need) {
+    if (editingWordId === w.id) continue;
+
+    trBgAttempts[w.id] = (trBgAttempts[w.id] || 0) + 1;
+    const tr = await fetchTranscription(w.en);
+
+    if (tr) {
+      w.tr = tr;
+      delete trBgAttempts[w.id];
+      changed = true;
+    } else if (trBgAttempts[w.id] >= TR_BG_MAX) {
+      delete trBgAttempts[w.id];
+    }
+  }
+
+  if (changed) {
+    saveState();
+    if (state.view === 'dictionary') renderWords();
+  }
+
+  const stillNeed = state.words.some(w =>
+    !w.tr && trBgAttempts[w.id] !== undefined && trBgAttempts[w.id] < TR_BG_MAX
+  );
+  if (stillNeed) {
+    trBgTimer = setTimeout(runTranscriptionQueue, TR_BG_INTERVAL);
+  }
+}
+
+/* ============================================================
+   [23] ИМПОРТ СЛОВ (paste + xlsx/csv)
    ============================================================ */
 
 const IMPORT_MAX = 100;
@@ -1848,7 +1909,7 @@ if (dropzone) {
 document.getElementById('importConfirm').addEventListener('click', executeImport);
 
 /* ============================================================
-   [23] ЭКСПОРТ СЛОВ В CSV
+   [24] ЭКСПОРТ СЛОВ В CSV
    ============================================================ */
 
 function exportWordsToCSV() {
@@ -1911,7 +1972,7 @@ function exportWordsToCSV() {
 document.getElementById('exportWordsBtn').addEventListener('click', exportWordsToCSV);
 
 /* ============================================================
-   [24] ОБРАТНАЯ СВЯЗЬ
+   [25] ОБРАТНАЯ СВЯЗЬ
    ============================================================ */
 
 const FEEDBACK_MAX = 2000;
@@ -2001,7 +2062,7 @@ feedbackModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [25] Поделиться
+   [26] Поделиться
    ============================================================ */
 
 const SHARE_URL = 'https://vetrovtimur.github.io/Wordbook/';
@@ -2038,7 +2099,7 @@ document.getElementById('menuShare').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [26] ЧТО НОВОГО
+   [27] ЧТО НОВОГО
    ============================================================ */
 
 const UPDATES_VERSION = 4;
@@ -2156,7 +2217,7 @@ document.getElementById('whatsNewModal').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [27] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
+   [28] ИНИЦИАЛИЗАЦИЯ И ПРЕЛОАДЕР
    ============================================================ */
 
 async function initApp() {
@@ -2199,7 +2260,12 @@ async function initApp() {
   }
   markTodayVisited();
 
-  fetch(WORKER_URL + '?word=hello').catch(() => {});
+  const WARMUP_WORDS = ['hello', 'cat', 'dog', 'house', 'book', 'love', 'time', 'day', 'man', 'woman'];
+  WARMUP_WORDS.forEach((w, i) => {
+    setTimeout(() => {
+      fetch(WORKER_URL + '?word=' + encodeURIComponent(w)).catch(() => {});
+    }, i * 400);
+  });
 
   render();
   renderUserMenu();
@@ -2261,7 +2327,7 @@ if (document.readyState === 'loading') {
 }
 
 /* ============================================================
-   [28] СМЕНА ПАРОЛЯ
+   [29] СМЕНА ПАРОЛЯ
    ============================================================ */
 
 const passwordModal = document.getElementById('passwordModal');
@@ -2390,7 +2456,7 @@ passwordModal.addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   [29] МОДАЛКА «ЦЕЛЬ ДНЯ»
+   [30] МОДАЛКА «ЦЕЛЬ ДНЯ»
    ============================================================ */
 
 const goalModal = document.getElementById('goalModal');
