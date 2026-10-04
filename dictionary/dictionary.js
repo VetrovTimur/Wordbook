@@ -90,10 +90,16 @@ let enAutoFilled = false;
    ============================================================ */
 
 function getCurrentUser() {
-  try { return localStorage.getItem(CURRENT_USER_KEY); } catch (e) { return null; }
+  try {
+    return localStorage.getItem(CURRENT_USER_KEY)
+        || sessionStorage.getItem(CURRENT_USER_KEY);
+  } catch (e) { return null; }
 }
 function clearCurrentUser() {
-  try { localStorage.removeItem(CURRENT_USER_KEY); } catch (e) {}
+  try {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    sessionStorage.removeItem(CURRENT_USER_KEY);
+  } catch (e) {}
 }
 
 /* Сохранение с дебаунсом */

@@ -57,13 +57,27 @@ function toggleTheme() {
 }
 
 function getCurrentUser() {
-  try { return localStorage.getItem(CURRENT_USER_KEY); } catch (e) { return null; }
+  try {
+    return localStorage.getItem(CURRENT_USER_KEY)
+        || sessionStorage.getItem(CURRENT_USER_KEY);
+  } catch (e) { return null; }
 }
-function setCurrentUser(name) {
-  try { localStorage.setItem(CURRENT_USER_KEY, name); } catch (e) {}
+function setCurrentUser(name, persistent = true) {
+  try {
+    if (persistent) {
+      localStorage.setItem(CURRENT_USER_KEY, name);
+      sessionStorage.removeItem(CURRENT_USER_KEY);
+    } else {
+      sessionStorage.setItem(CURRENT_USER_KEY, name);
+      localStorage.removeItem(CURRENT_USER_KEY);
+    }
+  } catch (e) {}
 }
 function clearCurrentUser() {
-  try { localStorage.removeItem(CURRENT_USER_KEY); } catch (e) {}
+  try {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    sessionStorage.removeItem(CURRENT_USER_KEY);
+  } catch (e) {}
 }
 
 /* UI-состояние */
@@ -307,8 +321,7 @@ async function handleRegister(name, pass) {
     words: [],
   });
 
-    if (getRememberMe()) setCurrentUser(name);
-  else clearCurrentUser();
+  setCurrentUser(name, getRememberMe());
   setLastUser(name);
   window.location.href = 'dictionary/dictionary.html';
 }
@@ -342,8 +355,7 @@ async function handleLogin(name, pass) {
     return;
   }
 
-    if (getRememberMe()) setCurrentUser(user.name);
-  else clearCurrentUser();
+      setCurrentUser(user.name, getRememberMe());
   setLastUser(user.name);
   if (user.role === 'admin') {
     window.location.href = 'adminPage/adminPage.html';
@@ -410,12 +422,13 @@ async function init() {
     });
   });
 
-  const remEl = document.getElementById('authRemember');
+    const remEl = document.getElementById('authRemember');
   if (remEl) {
     remEl.checked = getRememberMe();
     remEl.addEventListener('change', () => {
       setRememberMe(remEl.checked);
-      if (!remEl.checked) clearCurrentUser();
+      const name = getCurrentUser();
+      if (name) setCurrentUser(name, remEl.checked);
     });
   }
 
