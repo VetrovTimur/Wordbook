@@ -42,7 +42,6 @@ const CAL_DAYS_BEFORE = 10;
 const CAL_DAYS_AFTER = 10;
 const PRELOADER_MIN_TIME = 1000;
 
-const WORKER_URL = 'https://wordbook.timurworkvetrov.workers.dev/';
 const TRANSLATE_WORKER_URL = 'https://wordbook-translate.timurworkvetrov.workers.dev/';
 const TR_HINT_KEY_PREFIX = 'wordbook_hint_shown_v2_';
 
@@ -1264,31 +1263,8 @@ async function fetchTranscription(word) {
   const w = word.trim().toLowerCase();
   if (w.length < 2) return null;
 
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 12000);
-    const res = await fetch(WORKER_URL + '?word=' + encodeURIComponent(w), { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    for (const entry of data) {
-      const isAI = entry.ai === true;
-      if (entry.phonetic) return { tr: entry.phonetic, ai: isAI };
-      if (Array.isArray(entry.phonetics)) {
-        for (const p of entry.phonetics) {
-          if (p.text) return { tr: p.text, ai: isAI };
-        }
-      }
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function fetchPhoneticAI(word) {
-  const url = TRANSLATE_WORKER_URL + '?mode=phonetic&word=' + encodeURIComponent(word);
+  // Только AI через wordbook-translate
+  const url = TRANSLATE_WORKER_URL + '?mode=phonetic&word=' + encodeURIComponent(w);
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12000);
@@ -1297,9 +1273,7 @@ async function fetchPhoneticAI(word) {
     if (!res.ok) return null;
     const data = await res.json();
     if (data && typeof data.phonetic === 'string' && data.phonetic.trim()) {
-      if (data.word && data.word.toLowerCase() !== word.toLowerCase()) {
-        return null;
-      }
+      if (data.word && data.word.toLowerCase() !== w) return null;
       return { tr: data.phonetic.trim(), ai: true };
     }
     return null;
@@ -2279,18 +2253,10 @@ async function initApp() {
   }
   markTodayVisited();
 
-    // Warmup только для dictionaryapi (wordbook)
-  const WARMUP_WORDS = ['hello', 'cat', 'dog', 'house', 'book', 'love', 'time', 'day', 'man', 'woman', 'tree', 'water', 'fire', 'food', 'city', 'night', 'morning', 'friend', 'school', 'work'];
-  WARMUP_WORDS.forEach((w, i) => {
-    setTimeout(() => {
-      fetch(WORKER_URL + '?word=' + encodeURIComponent(w)).catch(() => {});
-    }, i * 350);
-  });
-
-  if (window.__wbKeepAlive) clearInterval(window.__wbKeepAlive);
-  window.__wbKeepAlive = setInterval(() => {
-    fetch(WORKER_URL + '?word=hello').catch(() => {});
-  }, 25000);
+  // Тихий прогрев AI-воркера
+  setTimeout(() => {
+    fetch(TRANSLATE_WORKER_URL + '?mode=phonetic&word=hello').catch(() => {});
+  }, 800);
 
   render();
   renderUserMenu();
