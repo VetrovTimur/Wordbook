@@ -399,6 +399,36 @@
             </div>
         </div>
 
+                <div class="modal-overlay" id="compareModal">
+            <div class="modal modal-lg">
+                <h2>Сравнение тренировок</h2>
+                <div class="compare-pickers">
+                    <div class="compare-picker">
+                        <div class="compare-picker-label">Тренировка А</div>
+                        <div class="compare-picker-value" id="compareAValue">—</div>
+                    </div>
+                    <div class="compare-picker">
+                        <div class="compare-picker-label">Тренировка Б</div>
+                        <select id="compareBSelect"></select>
+                    </div>
+                </div>
+
+                <div class="compare-chart-title">Прогресс по карточкам</div>
+                <div class="compare-chart" id="compareChart"></div>
+                <div class="compare-legend">
+                    <span class="compare-legend-item"><span class="legend-dot legend-dot-a"></span>А</span>
+                    <span class="compare-legend-item"><span class="legend-dot legend-dot-b"></span>Б</span>
+                </div>
+
+                <div class="compare-metrics" id="compareMetrics"></div>
+
+                <div class="modal-actions">
+                    <button class="btn-primary" type="button" id="compareClose">Закрыть</button>
+                </div>
+            </div>
+        </div>
+
+
         <div class="modal-overlay" id="importModal">
             <div class="modal modal-lg">
                 <h2>Импорт слов</h2>
@@ -479,6 +509,21 @@
                         </div>
                     </div>
 
+                                        <div class="train-field">
+                        <label>Режим</label>
+                        <div class="train-mode-group">
+                            <label class="train-mode-btn">
+                                <input type="radio" name="trainMode" value="cards" checked>
+                                <span>Карточки</span>
+                            </label>
+                            <label class="train-mode-btn">
+                                <input type="radio" name="trainMode" value="input">
+                                <span>Ввод текста</span>
+                            </label>
+                        </div>
+                    </div>
+
+
                     <div class="train-field">
                         <label for="trainCount">
                             Количество карточек
@@ -543,6 +588,46 @@
                     </button>
                 </div>
             </div>
+
+                        <!-- ЭКРАН 2b: ВВОД ТЕКСТА -->
+            <div class="train-screen train-screen-input" id="trainScreenInput" hidden>
+                <button class="train-close" id="trainInputExit" type="button" aria-label="Выйти">×</button>
+
+                <div class="train-progress">
+                    <div class="train-progress-text" id="trainInputProgressText">0 / 15</div>
+                    <div class="train-progress-bar">
+                        <div class="train-progress-fill" id="trainInputProgressFill"></div>
+                    </div>
+                </div>
+
+                <div class="train-input-card">
+                    <div class="train-input-hint" id="trainInputHint">Напишите перевод</div>
+                    <div class="train-input-word" id="trainInputWord"></div>
+
+                    <div class="train-input-field-wrap">
+                        <input type="text" id="trainInputField" class="train-input-field"
+                               autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                    </div>
+
+                    <div class="train-input-result" id="trainInputResult" hidden></div>
+                </div>
+
+                <div class="train-actions" id="trainInputActions">
+                    <button class="train-btn train-btn-wrong" type="button" id="trainInputSkip">
+                        <span>Пропустить</span>
+                    </button>
+                    <button class="train-btn train-btn-right" type="button" id="trainInputCheck">
+                        <span>Проверить</span>
+                    </button>
+                </div>
+
+                <div class="train-actions" id="trainInputActionsNext" hidden>
+                    <button class="train-btn train-btn-right" type="button" id="trainInputNext">
+                        <span>Дальше</span>
+                    </button>
+                </div>
+            </div>
+
 
             <!-- ЭКРАН 3: ИТОГ -->
             <div class="train-screen train-screen-result" id="trainScreenResult" hidden>

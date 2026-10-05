@@ -67,8 +67,12 @@ const defaultState = {
   visits: [],
   sections: [],
   words: [],
-  dailyGoal: 5,
+    dailyGoal: 5,
   dailyProgress: {},
+  trainingSessions: [],
+  statsTab: 'general',
+  statsPeriod: 7,
+  trainingMode: 'cards',
 };
 
 let currentUserName = null;
@@ -354,8 +358,434 @@ function computeStats() {
   return { streak, bestStreak, totalVisits, daysWithUs, missed, wordsCount, sectionsCount, avgWordsPerSection };
 }
 
+let sessionsShown = 10;
+
+function computeTrainingStats() {
+  const sessions = Array.isArray(state.trainingSessions) ? state.trainingSessions : [];
+  const totalSessions = sessions.length;
+  let totalWords = 0;
+  let totalCorrect = 0;
+  let bestPct = 0;
+  for (const s of sessions) {
+    totalWords += s.total || 0;
+    totalCorrect += s.correct || 0;
+    const pct = s.total ? Math.round((s.correct / s.total) * 100) : 0;
+    if (pct > bestPct) bestPct = pct;
+  }
+  const avgPct = totalWords ? Math.round((totalCorrect / totalWords) * 100) : 0;
+  return { totalSessions, totalWords, totalCorrect, avgPct, bestPct };
+}
+
+function formatDuration(sec) {
+  if (!sec && sec !== 0) return '—';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0
+    ? `${m}:${String(s).padStart(2, '0')}`
+    : `${s} сек`;
+}
+
+function computePeriodStats(days) {
+  const dayMs = 86400000;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayTs = today.getTime();
+  const thisStart = todayTs - (days - 1) * dayMs;
+  const thisEnd = todayTs + dayMs;
+  const prevStart = thisStart - days * dayMs;
+  const prevEnd = thisStart;
+
+  let thisWords = 0, thisCorrect = 0, thisSessions = 0;
+  let prevWords = 0, prevCorrect = 0, prevSessions = 0;
+
+  const sessions = Array.isArray(state.trainingSessions) ? state.trainingSessions : [];
+  for (const s of sessions) {
+    const ts = s.ts || 0;
+    if (ts >= thisStart && ts < thisEnd) {
+      thisWords += s.total || 0;
+      thisCorrect += s.correct || 0;
+      thisSessions++;
+    } else if (ts >= prevStart && ts < prevEnd) {
+      prevWords += s.total || 0;
+      prevCorrect += s.correct || 0;
+      prevSessions++;
+    }
+  }
+
+  const thisAvg = thisWords ? Math.round((thisCorrect / thisWords) * 100) : 0;
+  const prevAvg = prevWords ? Math.round((prevCorrect / prevWords) * 100) : 0;
+
+  return { thisWords, thisSessions, thisAvg, prevWords, prevSessions, prevAvg };
+}
+
+function renderPeriodCompare() {
+  const days = [7, 15, 30].includes(state.statsPeriod) ? state.statsPeriod : 7;
+
+  const tabs = [7, 15, 30].map(n =>
+    `<button class="period-tab${n === days ? ' active' : ''}" type="button" data-period="${n}">${n}</button>`
+  ).join('');
+
+  const s = computePeriodStats(days);
+  const noPrev = s.prevSessions === 0 && s.prevWords === 0;
+
+  const delta = (cur, prev, inverse = false) => {
+    if (prev === 0 && cur === 0) return { str: '—', cls: '' };
+    if (prev === 0) return { str: '+' + cur, cls: 'good' };
+    const diff = cur - prev;
+    if (diff === 0) return { str: '=', cls: '' };
+    const pct = Math.round((diff / prev) * 100);
+    const isGood = inverse ? diff < 0 : diff > 0;
+    return {
+      str: (diff > 0 ? '+' : '') + pct + '%',
+      cls: isGood ? 'good' : 'bad',
+    };
+  };
+
+  const dWords = delta(s.thisWords, s.prevWords);
+  const dSessions = delta(s.thisSessions, s.prevSessions);
+  const dAvg = delta(s.thisAvg, s.prevAvg);
+
+  return `
+    <div class="period-compare">
+      <div class="period-compare-head">
+        <div class="period-compare-title">Сравнение периодов</div>
+        <div class="period-tabs">${tabs}</div>
+      </div>
+      <div class="period-compare-sub">Этот период vs предыдущий ${days}-дневный</div>
+      <div class="period-metrics">
+        <div class="period-metric-row">
+          <div class="period-metric-name">Слов пройдено</div>
+          <div class="period-metric-val">${s.thisWords}</div>
+          <div class="period-metric-val muted">${s.prevWords}</div>
+          <div class="period-metric-delta ${dWords.cls}">${dWords.str}</div>
+        </div>
+        <div class="period-metric-row">
+          <div class="period-metric-name">Тренировок</div>
+          <div class="period-metric-val">${s.thisSessions}</div>
+          <div class="period-metric-val muted">${s.prevSessions}</div>
+          <div class="period-metric-delta ${dSessions.cls}">${dSessions.str}</div>
+        </div>
+        <div class="period-metric-row">
+          <div class="period-metric-name">Средний результат</div>
+          <div class="period-metric-val">${s.thisAvg}%</div>
+          <div class="period-metric-val muted">${s.prevAvg}%</div>
+          <div class="period-metric-delta ${dAvg.cls}">${dAvg.str}</div>
+        </div>
+      </div>
+      ${noPrev ? `<div class="period-empty">Пока не с чем сравнить — нужен ещё один такой же период данных.</div>` : ''}
+    </div>
+  `;
+}
+
+function renderTrainingStatsBlock() {
+  const s = computeTrainingStats();
+
+  const header = `<div class="stats-section-title">Тренировки</div>`;
+
+  if (s.totalSessions === 0) {
+    return `
+      <div class="stats-section">
+        ${header}
+        <div class="stats-empty">Вы ещё не проходили тренировки. Загляните в «Тренировку» в меню профиля.</div>
+      </div>
+    `;
+  }
+
+  const iconTarget = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
+  const iconCards  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`;
+  const iconCheck  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+  const iconTrophy = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>`;
+
+  const pluralSessions = (n) => plural(n, 'тренировка', 'тренировки', 'тренировок');
+  const pluralWords    = (n) => plural(n, 'слово', 'слова', 'слов');
+  const pluralCards    = (n) => plural(n, 'карточка', 'карточки', 'карточек');
+
+  // ── График за 14 дней ──
+  const DAYS = 14;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const buckets = [];
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    buckets.push({ iso: toISO(d), date: d, words: 0 });
+  }
+  const bucketMap = new Map(buckets.map(b => [b.iso, b]));
+  for (const sess of state.trainingSessions) {
+    if (!sess.ts) continue;
+    const d = new Date(sess.ts); d.setHours(0, 0, 0, 0);
+    const b = bucketMap.get(toISO(d));
+    if (b) b.words += sess.total || 0;
+  }
+  const maxWords = Math.max(1, ...buckets.map(b => b.words));
+  const todayISO = toISO(new Date());
+
+  const chart = buckets.map(b => {
+    const h = b.words > 0 ? Math.max(10, Math.round((b.words / maxWords) * 100)) : 0;
+    const isToday = b.iso === todayISO;
+    const title = b.words > 0
+      ? `${formatDate(b.date.getTime())}: ${b.words} ${pluralWords(b.words)}`
+      : formatDate(b.date.getTime());
+    return `
+      <div class="train-chart-col${isToday ? ' today' : ''}" title="${title}">
+        <div class="train-chart-bar-wrap">
+          ${b.words > 0 ? `<div class="train-chart-bar" style="height:${h}%"><span class="train-chart-val">${b.words}</span></div>` : ''}
+        </div>
+        <div class="train-chart-label">${b.date.getDate()}</div>
+      </div>
+    `;
+  }).join('');
+
+  // ── Список сессий ──
+  const all = [...state.trainingSessions].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const visible = all.slice(0, sessionsShown);
+  const hasMore = all.length > sessionsShown;
+
+    const canCompare = all.length >= 2;
+    const sessionsHtml = visible.map(sess => {
+    const pct = sess.total ? Math.round((sess.correct / sess.total) * 100) : 0;
+    const d = new Date(sess.ts);
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const tsVal = sess.ts || 0;
+    const sessMode = sess.mode === 'input' ? 'input' : 'cards';
+    const modeTitle = sessMode === 'input' ? 'Ввод текста' : 'Карточки';
+    const modeIcon = sessMode === 'input'
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`;
+    return `
+      <div class="session-row">
+        <div class="session-date">
+          <span class="session-date-day">${day}.${mon}</span>
+          <span class="session-date-year">${year}</span>
+        </div>
+        <div class="session-cards">
+          <span class="session-mode-mini mode-${sessMode}" title="${modeTitle}">${modeIcon}</span>
+          <span class="session-cards-num">${sess.total}</span>
+          <span class="session-cards-lbl">${pluralCards(sess.total)}</span>
+        </div>
+        <div class="session-pct${pct >= 80 ? ' good' : pct < 50 ? ' bad' : ''}">${pct}%</div>
+        <div class="session-time">${formatDuration(sess.duration || 0)}</div>
+        ${canCompare
+          ? `<button class="session-compare" type="button" data-compare="${tsVal}" title="Сравнить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </button>`
+          : `<div></div>`}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="stats-section">
+      ${header}
+      <div class="stat-grid">
+        <div class="stat-card primary">
+          <div class="stat-card-icon">${iconTarget}</div>
+          <div class="stat-card-value">${s.totalSessions}<span class="unit">${pluralSessions(s.totalSessions)}</span></div>
+          <div class="stat-card-label">Всего тренировок</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-icon">${iconCards}</div>
+          <div class="stat-card-value">${s.totalWords}<span class="unit">${pluralWords(s.totalWords)}</span></div>
+          <div class="stat-card-label">Пройдено карточек</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-icon">${iconCheck}</div>
+          <div class="stat-card-value">${s.avgPct}<span class="unit">%</span></div>
+          <div class="stat-card-label">Средний результат</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-icon">${iconTrophy}</div>
+          <div class="stat-card-value">${s.bestPct}<span class="unit">%</span></div>
+          <div class="stat-card-label">Лучший результат</div>
+        </div>
+            </div>
+
+      ${renderPeriodCompare()}
+
+      <div class="train-chart-title">За последние 14 дней</div>
+      <div class="train-chart">${chart}</div>
+
+      <div class="train-chart-title">Последние тренировки</div>
+      <div class="sessions-list">${sessionsHtml}</div>
+      ${hasMore ? `<button class="sessions-more" type="button" data-sessions-more>Показать ещё ${Math.min(10, all.length - sessionsShown)}</button>` : ''}
+    </div>
+  `;
+}
+
+/* ============================================================
+   Сравнение двух сессий (4.2)
+   ============================================================ */
+
+let compareA = null;
+let compareB = null;
+
+function openCompareModal(aTs) {
+  const a = state.trainingSessions.find(s => (s.ts || 0) === aTs);
+  if (!a) return;
+
+    compareA = a;
+  const aMode = a.mode === 'input' ? 'input' : 'cards';
+
+  const list = state.trainingSessions
+    .filter(s => (s.ts || 0) !== aTs
+              && (s.mode === 'input' ? 'input' : 'cards') === aMode)
+    .sort((x, y) => (y.ts || 0) - (x.ts || 0));
+
+  if (!list.length) {
+    const msg = aMode === 'input'
+      ? 'Нужна хотя бы ещё одна тренировка в режиме ввода'
+      : 'Нужна хотя бы ещё одна тренировка с карточками';
+    showToast(msg, 'warning');
+    return;
+  }
+
+  const dA = new Date(a.ts);
+  const pctA = a.total ? Math.round((a.correct / a.total) * 100) : 0;
+  document.getElementById('compareAValue').textContent =
+    `${String(dA.getDate()).padStart(2,'0')}.${String(dA.getMonth()+1).padStart(2,'0')} — ${a.total} карточек, ${pctA}%`;
+
+  const sel = document.getElementById('compareBSelect');
+  sel.innerHTML = list.map(s => {
+    const d = new Date(s.ts);
+    const pct = s.total ? Math.round((s.correct / s.total) * 100) : 0;
+    const label = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} — ${s.total} карточек, ${pct}%`;
+    return `<option value="${s.ts || 0}">${escapeHtml(label)}</option>`;
+  }).join('');
+
+  compareB = list[0];
+  sel.value = String(list[0].ts || 0);
+
+  renderCompare();
+  document.getElementById('compareModal').classList.add('show');
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModal').classList.remove('show');
+  compareA = null;
+  compareB = null;
+}
+
+function renderCompare() {
+  if (!compareA || !compareB) return;
+
+  document.getElementById('compareChart').innerHTML = buildCompareChart(compareA, compareB);
+
+  const pctA = compareA.total ? Math.round((compareA.correct / compareA.total) * 100) : 0;
+  const pctB = compareB.total ? Math.round((compareB.correct / compareB.total) * 100) : 0;
+  const dPct = pctA - pctB;
+  const dPctCls = dPct > 0 ? 'good' : dPct < 0 ? 'bad' : '';
+  const dPctStr = dPct > 0 ? `+${dPct}%` : dPct < 0 ? `${dPct}%` : '=';
+
+  const durA = compareA.duration || 0;
+  const durB = compareB.duration || 0;
+  const dDur = durA - durB;
+  const dDurCls = dDur < 0 ? 'good' : dDur > 0 ? 'bad' : '';
+  let dDurStr = '=';
+  if (dDur !== 0) {
+    const ad = Math.abs(dDur);
+    dDurStr = (dDur > 0 ? '+' : '−') + formatDuration(ad);
+  }
+
+  const cardA = compareA.total || 0;
+  const cardB = compareB.total || 0;
+  const dCard = cardA - cardB;
+  const dCardStr = dCard > 0 ? `+${dCard}` : dCard < 0 ? `${dCard}` : '=';
+
+  document.getElementById('compareMetrics').innerHTML = `
+    <div class="compare-metric-row">
+      <div class="compare-metric-name">Процент</div>
+      <div class="compare-metric-val">${pctA}%</div>
+      <div class="compare-metric-val">${pctB}%</div>
+      <div class="compare-metric-delta ${dPctCls}">${dPctStr}</div>
+    </div>
+    <div class="compare-metric-row">
+      <div class="compare-metric-name">Время</div>
+      <div class="compare-metric-val">${formatDuration(durA)}</div>
+      <div class="compare-metric-val">${formatDuration(durB)}</div>
+      <div class="compare-metric-delta ${dDurCls}">${dDurStr}</div>
+    </div>
+    <div class="compare-metric-row">
+      <div class="compare-metric-name">Карточек</div>
+      <div class="compare-metric-val">${cardA}</div>
+      <div class="compare-metric-val">${cardB}</div>
+      <div class="compare-metric-delta">${dCardStr}</div>
+    </div>
+  `;
+}
+
+function buildCompareChart(a, b) {
+  function toPoints(sess) {
+    const curve = Array.isArray(sess.curve) ? sess.curve : [];
+    if (!curve.length) return [];
+    const total = sess.total || curve.length;
+    let cum = 0;
+    const pts = [];
+    for (let i = 0; i < curve.length; i++) {
+      cum += curve[i];
+      const x = curve.length === 1 ? 100 : (i / (curve.length - 1)) * 100;
+      const y = total ? (cum / total) * 100 : 0;
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  const ptsA = toPoints(a);
+  const ptsB = toPoints(b);
+
+  if (!ptsA.length || !ptsB.length) {
+    return '<div class="compare-chart-empty">Нет данных для сравнения кривых</div>';
+  }
+
+  function toPath(pts) {
+    return pts.map((p, i) => {
+      const x = p.x.toFixed(2);
+      const y = (100 - p.y).toFixed(2);
+      return (i === 0 ? 'M' : 'L') + x + ',' + y;
+    }).join(' ');
+  }
+
+  const gridLines = [25, 50, 75].map(y =>
+    `<line x1="0" y1="${y}" x2="100" y2="${y}" stroke="currentColor" stroke-width="1" opacity="0.12" vector-effect="non-scaling-stroke"/>`
+  ).join('');
+
+  return `
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="compare-svg">
+      ${gridLines}
+      <path d="${toPath(ptsA)}" class="compare-line compare-line-a" vector-effect="non-scaling-stroke"/>
+      <path d="${toPath(ptsB)}" class="compare-line compare-line-b" vector-effect="non-scaling-stroke"/>
+    </svg>
+  `;
+}
+
+/* ---------- События модалки сравнения ---------- */
+document.getElementById('compareBSelect').addEventListener('change', (e) => {
+  const tsVal = parseInt(e.target.value, 10);
+  const b = state.trainingSessions.find(s => (s.ts || 0) === tsVal);
+  if (b) { compareB = b; renderCompare(); }
+});
+document.getElementById('compareClose').addEventListener('click', closeCompareModal);
+document.getElementById('compareModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('compareModal')) closeCompareModal();
+});
+
+
 function renderStats() {
   const container = document.getElementById('wordList');
+  container.className = 'stats-view';
+
+  const tab = state.statsTab === 'training' ? 'training' : 'general';
+
+  container.innerHTML = `
+    <div class="stats-tabs">
+      <button class="stats-tab ${tab === 'general' ? 'active' : ''}" type="button" data-stats-tab="general">Общее</button>
+      <button class="stats-tab ${tab === 'training' ? 'active' : ''}" type="button" data-stats-tab="training">Тренировки</button>
+    </div>
+    ${tab === 'general' ? renderGeneralStatsBlock() : renderTrainingStatsBlock()}
+  `;
+}
+
+function renderGeneralStatsBlock() {
   const s = computeStats();
 
   const iconFire = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`;
@@ -373,51 +803,50 @@ function renderStats() {
   const pluralSections = (n) => plural(n, 'раздел', 'раздела', 'разделов');
   const pluralVisits = (n) => plural(n, 'заход', 'захода', 'заходов');
 
-  container.className = 'stats-view';
-  container.innerHTML = `
-    <div class="stats-intro">
-      <p>Дневник ваших занятий со словарём</p>
-    </div>
-    <div class="stat-grid">
-      <div class="${cc(true)}">
-        <div class="stat-card-icon">${iconFire}</div>
-        <div class="stat-card-value">${s.streak}<span class="unit">${pluralDays(s.streak)}</span></div>
-        <div class="stat-card-label">Текущая серия</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconTrophy}</div>
-        <div class="stat-card-value">${s.bestStreak}<span class="unit">${pluralDays(s.bestStreak)}</span></div>
-        <div class="stat-card-label">Лучшая серия</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconCheck}</div>
-        <div class="stat-card-value">${s.totalVisits}<span class="unit">${pluralVisits(s.totalVisits)}</span></div>
-        <div class="stat-card-label">Всего заходов</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconMiss}</div>
-        <div class="stat-card-value">${s.missed}<span class="unit">${pluralDays(s.missed)}</span></div>
-        <div class="stat-card-label">Пропущено</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconCal}</div>
-        <div class="stat-card-value">${s.daysWithUs}<span class="unit">${pluralDays(s.daysWithUs)}</span></div>
-        <div class="stat-card-label">С нами</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconBook}</div>
-        <div class="stat-card-value">${s.wordsCount}<span class="unit">${pluralWords(s.wordsCount)}</span></div>
-        <div class="stat-card-label">В словаре</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconLayer}</div>
-        <div class="stat-card-value">${s.sectionsCount}<span class="unit">${pluralSections(s.sectionsCount)}</span></div>
-        <div class="stat-card-label">Разделов</div>
-      </div>
-      <div class="${cc(false)}">
-        <div class="stat-card-icon">${iconHash}</div>
-        <div class="stat-card-value">${s.avgWordsPerSection.toFixed(1)}</div>
-        <div class="stat-card-label">Слов на раздел</div>
+  return `
+    <div class="stats-section">
+      <div class="stats-section-title">Дневник ваших занятий со словарём</div>
+      <div class="stat-grid">
+        <div class="${cc(true)}">
+          <div class="stat-card-icon">${iconFire}</div>
+          <div class="stat-card-value">${s.streak}<span class="unit">${pluralDays(s.streak)}</span></div>
+          <div class="stat-card-label">Текущая серия</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconTrophy}</div>
+          <div class="stat-card-value">${s.bestStreak}<span class="unit">${pluralDays(s.bestStreak)}</span></div>
+          <div class="stat-card-label">Лучшая серия</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconCheck}</div>
+          <div class="stat-card-value">${s.totalVisits}<span class="unit">${pluralVisits(s.totalVisits)}</span></div>
+          <div class="stat-card-label">Всего заходов</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconMiss}</div>
+          <div class="stat-card-value">${s.missed}<span class="unit">${pluralDays(s.missed)}</span></div>
+          <div class="stat-card-label">Пропущено</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconCal}</div>
+          <div class="stat-card-value">${s.daysWithUs}<span class="unit">${pluralDays(s.daysWithUs)}</span></div>
+          <div class="stat-card-label">С нами</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconBook}</div>
+          <div class="stat-card-value">${s.wordsCount}<span class="unit">${pluralWords(s.wordsCount)}</span></div>
+          <div class="stat-card-label">В словаре</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconLayer}</div>
+          <div class="stat-card-value">${s.sectionsCount}<span class="unit">${pluralSections(s.sectionsCount)}</span></div>
+          <div class="stat-card-label">Разделов</div>
+        </div>
+        <div class="${cc(false)}">
+          <div class="stat-card-icon">${iconHash}</div>
+          <div class="stat-card-value">${s.avgWordsPerSection.toFixed(1)}</div>
+          <div class="stat-card-label">Слов на раздел</div>
+        </div>
       </div>
     </div>
   `;
@@ -1111,6 +1540,44 @@ document.getElementById('shuffleBtn').addEventListener('click', (e) => {
 });
 
 document.getElementById('wordList').addEventListener('click', async (e) => {
+  const moreBtn = e.target.closest('[data-sessions-more]');
+  if (moreBtn) {
+    sessionsShown += 10;
+    renderStats();
+    return;
+  }
+
+    const cmpBtn = e.target.closest('[data-compare]');
+  if (cmpBtn) {
+    e.preventDefault();
+    const tsVal = parseInt(cmpBtn.getAttribute('data-compare'), 10);
+    openCompareModal(tsVal);
+    return;
+  }
+
+    const tabBtn = e.target.closest('[data-stats-tab]');
+  if (tabBtn) {
+    const nextTab = tabBtn.getAttribute('data-stats-tab');
+    if (state.statsTab !== nextTab) {
+      state.statsTab = nextTab;
+      sessionsShown = 10;
+      saveState();
+      renderStats();
+    }
+    return;
+  }
+
+  const periodBtn = e.target.closest('[data-period]');
+  if (periodBtn) {
+    const nextPeriod = parseInt(periodBtn.getAttribute('data-period'), 10);
+    if (state.statsPeriod !== nextPeriod) {
+      state.statsPeriod = nextPeriod;
+      saveState();
+      renderStats();
+    }
+    return;
+  }
+
   if (state.view === 'stats') return;
 
   const speakBtn = e.target.closest('[data-speak]');
@@ -2125,11 +2592,23 @@ document.getElementById('menuShare').addEventListener('click', (e) => {
    [27] ЧТО НОВОГО
    ============================================================ */
 
-const UPDATES_VERSION = 6;
+const UPDATES_VERSION = 7;
 const UPDATES_KEY_PREFIX = 'wordbook_updates_seen_v3_';
 
 const UPDATES = [
-  /* ── Версия 6 (новые) ── */
+  /* ── Версия 7 (новые) ── */
+  { type: 'feature', icon: 'target', title: 'Статистика тренировок',       text: 'Отдельный раздел «Тренировки» в статистике: сколько раз занимались, средний и лучший результат, график активности за 14 дней, список всех сессий.' },
+  { type: 'feature', icon: 'chart',  title: 'Сравнение тренировок',        text: 'Сравнивайте две любые тренировки одного типа: накладывайте кривые друг на друга, смотрите разницу по проценту, времени и количеству карточек.' },
+  { type: 'feature', icon: 'zap',    title: 'Сравнение периодов',          text: 'Смотрите, как вы растёте: этот 7/15/30-дневный период против предыдущего. Слова, тренировки, средний результат — с цветными дельтами.' },
+  { type: 'feature', icon: 'key',    title: 'Режим ввода текста',          text: 'Новый режим тренировки — вы пишете перевод, а Wordbook проверяет. Ошибки показываются с подсветкой: зачёркнутая буква и правильный ответ сверху. Карточка возвращается, пока не напишете верно или не пропустите.' },
+  { type: 'feature', icon: 'star',   title: 'Табы в статистике',           text: 'Раздел «Статистика» разделён на две вкладки: «Общее» — дневник занятий со словарём, и «Тренировки» — отдельно про карточки. Переключается в один клик.' },
+  { type: 'feature', icon: 'install',title: 'Автообновление после тренировки', text: 'После завершения тренировки статистика обновляется сама — не нужно перезагружать страницу вручную. Прогресс гарантированно сохраняется перед показом новых данных.' },
+  { type: 'improve', icon: 'tag',    title: 'Метки режима',                text: 'В списке тренировок видно, какая была карточками, а какая — вводом текста. Сравнивать можно только однотипные.' },
+  { type: 'improve', icon: 'moon',   title: 'Единая тема',                 text: 'Тёмная или светлая тема теперь одна на всё приложение: выбираете в словаре — она же будет на странице входа и в админке.' },
+  { type: 'improve', icon: 'search', title: 'Фильтр по части речи',        text: 'Над таблицей слов появились чипсы: существительные, глаголы, прилагательные и так далее — с количеством слов. Один клик — и вы видите только эту часть речи.' },
+  { type: 'fix',     icon: 'mobile', title: 'Словарь на телефоне',         text: 'На узких экранах слова больше не перекрывают друг друга: каждое слово — отдельной карточкой, с переводом и транскрипцией.' },
+
+  /* ── Версия 6 ── */
   { type: 'feature', icon: 'target', title: 'Тренировка слов',              text: 'Карточки для заучивания: выбираете раздел и направление, листаете слова, отмечаете «Знаю» или «Не знаю». Прогресс считается, слова, которые не знаете, повторяются.' },
   
   /* ── Версия 5 (новые) ── */
@@ -2315,9 +2794,12 @@ function hidePreloader() {
   const preloader = document.getElementById('preloader');
   if (!preloader) return;
   preloader.classList.add('hide');
-  setTimeout(() => {
-    if (preloader.parentNode) preloader.parentNode.removeChild(preloader);
-  }, 600);
+}
+
+function showPreloader() {
+  const preloader = document.getElementById('preloader');
+  if (!preloader) return;
+  preloader.classList.remove('hide');
 }
 
 function startPreloader() {
@@ -2592,10 +3074,14 @@ const training = {
   correct: 0,
   wrong: 0,
   retried: new Set(),
+  results: [],           // [1/0] по первой попытке на каждую карточку
   startTime: 0,
   showing: false,
   direction: 'ru-en',
-  settings: { sectionId: 'all', count: 5 }
+  mode: 'cards',         // 'cards' | 'input'
+  settings: { sectionId: 'all', count: 5 },
+  shouldRefreshOnClose: false,
+  inputAnswered: false   // для режима ввода — уже проверен ответ или нет
 };
 
 function openTrainingModal() {
@@ -2621,8 +3107,14 @@ function openTrainingModal() {
   } else {
     sel.value = 'all';
   }
-  document.querySelectorAll('input[name="trainDirection"]').forEach(r => {
+    document.querySelectorAll('input[name="trainDirection"]').forEach(r => {
     r.checked = (r.value === training.direction);
+  });
+
+  // Режим — из state (запоминаем между заходами)
+  training.mode = state.trainingMode === 'input' ? 'input' : 'cards';
+  document.querySelectorAll('input[name="trainMode"]').forEach(r => {
+    r.checked = (r.value === training.mode);
   });
 
   updateTrainSection();
@@ -2640,11 +3132,46 @@ function openTrainingModal() {
 function closeTrainingModal() {
   document.getElementById('trainingOverlay').classList.remove('show');
   document.getElementById('trainCard').classList.remove('flipped');
+
+  if (training.shouldRefreshOnClose) {
+    training.shouldRefreshOnClose = false;
+    flushStateAndReload();
+    return;
+  }
+}
+
+async function flushStateAndReload() {
+  // 1. Сразу показываем прелоадер — юзер не должен видеть старый экран
+  showPreloader();
+
+  // 2. Гасим debounce
+  if (saveDebounceTimer) { clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
+
+  // 3. Сохраняем и ЖДЁМ фактической отправки на сервер.
+  //    Firestore set() резолвится оптимистично — до реального коммита.
+  //    Без waitForPendingWrites после reload прочитаем старые данные.
+  try {
+    if (currentUserName) {
+      await fbSaveState(currentUserName, state);
+      if (typeof db !== 'undefined' && db.waitForPendingWrites) {
+        await Promise.race([
+          db.waitForPendingWrites(),
+          new Promise(r => setTimeout(r, 3000))  // страховка от вечного ожидания
+        ]);
+      }
+    }
+  } catch (e) { /* даже если упало — всё равно перезагружаем */ }
+
+  // 4. Небольшая пауза, чтобы прелоадер не мигал одну миллисекунду
+  await new Promise(r => setTimeout(r, 250));
+
+  window.location.reload();
 }
 
 function showTrainScreen(name) {
   document.getElementById('trainScreenSetup').hidden = (name !== 'setup');
   document.getElementById('trainScreenCard').hidden = (name !== 'card');
+  document.getElementById('trainScreenInput').hidden = (name !== 'input');
   document.getElementById('trainScreenResult').hidden = (name !== 'result');
 }
 
@@ -2698,9 +3225,17 @@ function startTraining() {
   const sectionId = document.getElementById('trainSection').value;
   const direction = document.querySelector('input[name="trainDirection"]:checked').value;
   const count = parseInt(document.getElementById('trainCount').value, 10) || 5;
+  const mode = document.querySelector('input[name="trainMode"]:checked').value;
 
   training.settings = { sectionId, count };
   training.direction = direction;
+  training.mode = mode === 'input' ? 'input' : 'cards';
+
+  // Запоминаем режим в state
+  if (state.trainingMode !== training.mode) {
+    state.trainingMode = training.mode;
+    saveState();
+  }
 
   let pool = state.words;
   if (sectionId !== 'all') pool = pool.filter(w => w.sectionId === sectionId);
@@ -2715,14 +3250,16 @@ function startTraining() {
       : direction
   }));
 
-  training.originalTotal = training.queue.length;
+    training.originalTotal = training.queue.length;
   training.correct = 0;
   training.wrong = 0;
   training.retried = new Set();
+  training.results = [];
   training.startTime = Date.now();
   training.showing = false;
+  training.inputAnswered = false;
 
-  showTrainScreen('card');
+  showTrainScreen(training.mode === 'input' ? 'input' : 'card');
   nextTrainCard();
 }
 
@@ -2732,8 +3269,14 @@ function nextTrainCard() {
     return;
   }
   training.current = training.queue.shift();
-  renderTrainCard();
-  updateTrainProgress();
+
+  if (training.mode === 'input') {
+    renderInputCard();
+    updateTrainProgress();
+  } else {
+    renderTrainCard();
+    updateTrainProgress();
+  }
 }
 
 function renderTrainCard() {
@@ -2781,10 +3324,14 @@ function flipTrainCard() {
 
 function updateTrainProgress() {
   const total = training.originalTotal || 1;
-  const pct = Math.min(100, Math.round((training.correct / total) * 100));
-  document.getElementById('trainProgressText').textContent =
-    `${training.correct} / ${training.originalTotal}`;
+  const processed = training.results.length;
+  const pct = Math.min(100, Math.round((processed / total) * 100));
+  const txt = `${processed} / ${training.originalTotal}`;
+
+  document.getElementById('trainProgressText').textContent = txt;
   document.getElementById('trainProgressFill').style.width = pct + '%';
+  document.getElementById('trainInputProgressText').textContent = txt;
+  document.getElementById('trainInputProgressFill').style.width = pct + '%';
 }
 
 function trainAnswer(known) {
@@ -2793,26 +3340,260 @@ function trainAnswer(known) {
 
   const item = training.current;
   const wordId = item.word.id;
+  const isRetry = training.retried.has(wordId);
 
-  if (known) {
-    training.correct++;
-  } else {
-    training.wrong++;
-    if (!training.retried.has(wordId)) {
-      // Первый раз "не знаю" — слово в конец очереди
+  if (!isRetry) {
+    // Первая попытка — фиксируем в статистику
+    if (known) {
+      training.correct++;
+      training.results.push(1);
+    } else {
+      training.wrong++;
+      training.results.push(0);
       training.retried.add(wordId);
       training.queue.push(item);
     }
-    // Второй раз — просто пропускаем
   }
+  // Повторные попытки не меняют correct/wrong/results
 
   training.current = null;
   nextTrainCard();
 }
 
+/* ============================================================
+   РЕЖИМ ВВОДА ТЕКСТА
+   ============================================================ */
+
+function diffWords(userInput, correct) {
+  // Оба уже lowercase и trimmed
+  const a = userInput;
+  const b = correct;
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const raw = [];
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) { raw.unshift({ t: 's', c: a[i - 1] }); i--; j--; }
+    else if (dp[i - 1][j] >= dp[i][j - 1]) { raw.unshift({ t: 'x', c: a[i - 1] }); i--; }
+    else { raw.unshift({ t: 'm', c: b[j - 1] }); j--; }
+  }
+  while (i > 0) { raw.unshift({ t: 'x', c: a[i - 1] }); i--; }
+  while (j > 0) { raw.unshift({ t: 'm', c: b[j - 1] }); j--; }
+  return raw;
+}
+
+function renderDiffHtml(tokens) {
+  if (!tokens.length) return '';
+
+  const groups = [];
+  let cur = null;
+  for (const tok of tokens) {
+    if (tok.t === 's') {
+      if (cur) { groups.push(cur); cur = null; }
+      groups.push({ type: 'same', chars: [tok.c] });
+    } else {
+      if (cur && cur.type === 'diff') {
+        cur.tokens.push(tok);
+      } else {
+        if (cur) groups.push(cur);
+        cur = { type: 'diff', tokens: [tok] };
+      }
+    }
+  }
+  if (cur) groups.push(cur);
+
+  return groups.map(g => {
+    if (g.type === 'same') {
+      return g.chars.map(c => `<span class="diff-char">${escapeHtml(c)}</span>`).join('');
+    }
+    const extras = g.tokens.filter(t => t.t === 'x').map(t => t.c);
+    const misses = g.tokens.filter(t => t.t === 'm').map(t => t.c);
+    let html = '<span class="diff-group">';
+    if (misses.length) {
+      html += `<span class="diff-sup">${escapeHtml(misses.join(''))}</span>`;
+    }
+    if (extras.length) {
+      html += `<span class="diff-base">${escapeHtml(extras.join(''))}</span>`;
+    } else if (misses.length) {
+      // Нет «лишних» у юзера — только пропущенные. Рисуем маркер-галочку снизу.
+      html += `<span class="diff-base"><span class="diff-insert-mark">⌄</span></span>`;
+    }
+    html += '</span>';
+    return html;
+  }).join('');
+}
+
+function renderInputCard() {
+  const item = training.current;
+  if (!item) return;
+
+  const w = item.word;
+  const front = item.direction === 'ru-en' ? w.ru : w.en;
+  const hint = item.direction === 'ru-en' ? 'Напишите перевод на английский' : 'Напишите перевод на русский';
+
+  document.getElementById('trainInputWord').textContent = front;
+  document.getElementById('trainInputHint').textContent = hint;
+
+  const field = document.getElementById('trainInputField');
+  field.value = '';
+  field.disabled = false;
+  field.classList.remove('correct', 'wrong');
+  field.type = 'text';
+
+  document.getElementById('trainInputResult').hidden = true;
+  document.getElementById('trainInputResult').innerHTML = '';
+  document.getElementById('trainInputResult').className = 'train-input-result';
+
+  document.getElementById('trainInputActions').hidden = false;
+  document.getElementById('trainInputActionsNext').hidden = true;
+
+  document.getElementById('trainInputCheck').disabled = false;
+  document.getElementById('trainInputSkip').disabled = false;
+
+  training.inputAnswered = false;
+
+  setTimeout(() => field.focus(), 80);
+}
+
+function checkInputAnswer() {
+  if (!training.current) return;
+  if (training.inputAnswered) return;
+
+  const item = training.current;
+  const w = item.word;
+  const field = document.getElementById('trainInputField');
+  const result = document.getElementById('trainInputResult');
+
+  const userRaw = field.value.trim().toLowerCase();
+  const correct = (item.direction === 'ru-en' ? w.en : w.ru).trim().toLowerCase();
+
+  training.inputAnswered = true;
+  field.disabled = true;
+  document.getElementById('trainInputActions').hidden = true;
+  document.getElementById('trainInputActionsNext').hidden = false;
+
+  const wordId = w.id;
+  const isFirstAttempt = !training.retried.has(wordId);
+  const isCorrect = userRaw === correct && userRaw.length > 0;
+
+  if (isFirstAttempt) {
+    training.retried.add(wordId);
+    if (isCorrect) {
+      training.correct++;
+      training.results.push(1);
+    } else {
+      training.wrong++;
+      training.results.push(0);
+    }
+  }
+
+  // При ошибке — ВСЕГДА возвращаем в очередь (независимо от попытки).
+  // Уйдёт только когда угадает или нажмёт «Пропустить».
+  if (!isCorrect) {
+    training.queue.push(item);
+  }
+
+  if (isCorrect) {
+    field.classList.add('correct');
+    result.classList.add('ok');
+    result.innerHTML = '✓ Верно';
+    result.hidden = false;
+  } else if (!userRaw) {
+    field.classList.add('wrong');
+    result.classList.add('fail');
+    result.innerHTML = `<span class="diff-correct">${escapeHtml(correct)}</span>`;
+    result.hidden = false;
+  } else {
+    field.classList.add('wrong');
+    result.classList.add('fail');
+    const tokens = diffWords(userRaw, correct);
+    const diffHtml = renderDiffHtml(tokens);
+    result.innerHTML = `<span class="diff-word">${diffHtml}</span>` +
+                      `<span class="diff-arrow">—</span>` +
+                      `<span class="diff-correct">${escapeHtml(correct)}</span>`;
+    result.hidden = false;
+  }
+
+  updateTrainProgress();
+
+  setTimeout(() => document.getElementById('trainInputNext').focus(), 60);
+}
+
+function skipInputCard() {
+  if (!training.current) return;
+  if (training.inputAnswered) return;
+
+  const item = training.current;
+  const w = item.word;
+
+  training.inputAnswered = true;
+  document.getElementById('trainInputField').disabled = true;
+  document.getElementById('trainInputActions').hidden = true;
+  document.getElementById('trainInputActionsNext').hidden = false;
+
+  const wordId = w.id;
+  const isRetry = training.retried.has(wordId);
+
+  if (!isRetry) {
+    training.wrong++;
+    training.results.push(0);
+    training.retried.add(wordId);
+    // НЕ добавляем в queue — карточка больше не вернётся
+  }
+
+  const correct = (item.direction === 'ru-en' ? w.en : w.ru).trim().toLowerCase();
+  const result = document.getElementById('trainInputResult');
+  result.classList.add('fail');
+  result.innerHTML = `<span class="diff-correct">${escapeHtml(correct)}</span>`;
+  result.hidden = false;
+
+  updateTrainProgress();
+
+  setTimeout(() => document.getElementById('trainInputNext').focus(), 60);
+}
+
+function trainInputNext() {
+  if (!training.inputAnswered) return;
+  training.current = null;
+  training.inputAnswered = false;
+  nextTrainCard();
+}
+
+function handleInputEnter() {
+  if (!training.inputAnswered) {
+    checkInputAnswer();
+  } else {
+    trainInputNext();
+  }
+}
+
 function showTrainResult() {
   const total = training.originalTotal || 1;
   const pct = Math.round((training.correct / total) * 100);
+
+  // Сохраняем завершённую тренировку
+  if (training.originalTotal > 0) {
+    if (!Array.isArray(state.trainingSessions)) state.trainingSessions = [];
+        state.trainingSessions.push({
+      ts: Date.now(),
+      total: training.originalTotal,
+      correct: training.correct,
+      duration: Math.round((Date.now() - training.startTime) / 1000),
+      curve: training.results.slice(),
+      mode: training.mode,
+    });
+        if (state.trainingSessions.length > 500) {
+      state.trainingSessions = state.trainingSessions.slice(-500);
+    }
+    saveState();
+    training.shouldRefreshOnClose = true;
+  }
 
   document.getElementById('trainResultBig').textContent =
     `${training.correct} / ${training.originalTotal}`;
@@ -2873,6 +3654,35 @@ document.getElementById('trainRight').addEventListener('click', (e) => {
   trainAnswer(true);
 });
 
+/* ---------- Режим ввода: обработчики ---------- */
+
+document.getElementById('trainInputCheck').addEventListener('click', (e) => {
+  e.stopPropagation();
+  checkInputAnswer();
+});
+
+document.getElementById('trainInputSkip').addEventListener('click', (e) => {
+  e.stopPropagation();
+  skipInputCard();
+});
+
+document.getElementById('trainInputNext').addEventListener('click', (e) => {
+  e.stopPropagation();
+  trainInputNext();
+});
+
+document.getElementById('trainInputExit').addEventListener('click', async () => {
+  if (training.correct + training.wrong > 0) {
+    const ok = await showConfirm(
+      'Прервать тренировку? Прогресс не сохранится.',
+      'Прервать?', 'Прервать'
+    );
+    if (!ok) return;
+  }
+  closeTrainingModal();
+});
+
+
 document.getElementById('trainExit').addEventListener('click', async () => {
   if (training.correct + training.wrong > 0) {
     const ok = await showConfirm(
@@ -2905,9 +3715,20 @@ document.addEventListener('keydown', (e) => {
   const cardScreen = document.getElementById('trainScreenCard');
   const isCardScreen = cardScreen && !cardScreen.hidden;
 
+  const inputScreen = document.getElementById('trainScreenInput');
+  const isInputScreen = inputScreen && !inputScreen.hidden;
+
   if (e.key === 'Escape') {
     e.preventDefault();
     document.getElementById('trainExit').click();
+    return;
+  }
+
+  if (isInputScreen) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleInputEnter();
+    }
     return;
   }
 
