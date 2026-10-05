@@ -30,7 +30,7 @@
    [1] КОНСТАНТЫ И STATE
    ============================================================ */
 
-const ADMIN_THEME_KEY = 'wordbook_admin_theme';
+/* Тема — общий ключ через common.js */
 const PAGE_SIZE = 15;
 const LOG_PAGE_SIZE = 20;
 const PRELOADER_MIN_TIME = 1000;
@@ -57,9 +57,11 @@ let feedbackPage = 1;
    ============================================================ */
 
 function loadTheme() {
-  try { return localStorage.getItem(ADMIN_THEME_KEY) || 'light'; } catch (e) { return 'light'; }
+  return getStoredTheme();
 }
-function saveTheme(t) { try { localStorage.setItem(ADMIN_THEME_KEY, t); } catch (e) {} }
+function saveTheme(t) {
+  setStoredTheme(t);
+}
 let theme = loadTheme();
 
 function applyTheme() {

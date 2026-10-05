@@ -33,13 +33,11 @@ function resetPasswordEyes() {
 }
 
 /* Тема */
-const AUTH_THEME_KEY = 'wordbook_auth_theme';
-
 function loadTheme() {
-  try { return localStorage.getItem(AUTH_THEME_KEY) || 'light'; } catch (e) { return 'light'; }
+  return getStoredTheme();
 }
 function saveTheme(t) {
-  try { localStorage.setItem(AUTH_THEME_KEY, t); } catch (e) {}
+  setStoredTheme(t);
 }
 
 let theme = loadTheme();

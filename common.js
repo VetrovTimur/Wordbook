@@ -3,6 +3,16 @@
 const CURRENT_USER_KEY = 'wordbook_current_user';
 const PASSWORD_MIN = 6;
 
+/* Единый ключ темы для всех страниц */
+const THEME_KEY = 'wordbook_theme';
+
+function getStoredTheme() {
+  try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; }
+}
+function setStoredTheme(t) {
+  try { localStorage.setItem(THEME_KEY, t === 'dark' ? 'dark' : 'light'); } catch (e) {}
+}
+
 function toISO(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');

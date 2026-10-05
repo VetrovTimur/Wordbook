@@ -86,6 +86,7 @@ let trAutoFilled = false;
 let trIsAI = false;
 let trRuFetchTimer = null;
 let enAutoFilled = false;
+let posFilter = '';  // '' = все, иначе код POS (noun/verb/...)
 
 /* ============================================================
    [2] ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ + СОХРАНЕНИЕ
@@ -260,6 +261,7 @@ function getActiveSectionName() {
 function getFilteredWords() {
   let words = state.words;
   if (state.activeSectionId !== 'all') words = words.filter(w => w.sectionId === state.activeSectionId);
+  if (posFilter) words = words.filter(w => w.pos === posFilter);
   if (currentSearch.trim()) {
     const q = currentSearch.trim().toLowerCase();
     words = words.filter(w =>
@@ -490,12 +492,13 @@ function render() {
     renderUserCard();
   document.body.classList.toggle('view-stats', state.view === 'stats');
 
-  renderGoalCard();
+    renderGoalCard();
   renderCalendar();
   renderAllWordsBlock();
   renderSections();
   renderAddSection();
   renderSectionSelect();
+  renderPosFilter();
 
   if (state.view === 'stats') {
     document.getElementById('mainTitle').textContent = 'Статистика';
@@ -843,6 +846,52 @@ function renderSectionSelect() {
   else if (state.sections.length) sel.value = state.sections[0].id;
 }
 
+function renderPosFilter() {
+  const el = document.getElementById('posFilter');
+  if (!el) return;
+
+  // Считаем по словам текущего раздела (без учёта текущего posFilter)
+  let pool = state.words;
+  if (state.activeSectionId !== 'all') {
+    pool = pool.filter(w => w.sectionId === state.activeSectionId);
+  }
+
+  const counts = {};
+  let withPos = 0;
+  pool.forEach(w => {
+    if (w.pos) {
+      counts[w.pos] = (counts[w.pos] || 0) + 1;
+      withPos++;
+    }
+  });
+
+  // Если ни у одного слова нет pos — прячем фильтр
+  if (withPos === 0) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+
+  const total = pool.length;
+
+  const chips = [
+    `<button class="pos-filter-chip ${posFilter === '' ? 'active' : ''}" data-pos="">Все<span class="cnt">${total}</span></button>`
+  ];
+
+  // Порядок как в POS_SHORT
+  const order = ['noun', 'verb', 'adj', 'adv', 'pron', 'prep', 'conj', 'interj', 'num', 'art'];
+  order.forEach(code => {
+    const n = counts[code] || 0;
+    if (!n) return;
+    chips.push(
+      `<button class="pos-filter-chip ${posFilter === code ? 'active' : ''}" data-pos="${code}">${escapeHtml(POS_SHORT[code])}<span class="cnt">${n}</span></button>`
+    );
+  });
+
+  el.innerHTML = chips.join('');
+}
+
 /* ============================================================
    [13] ДРОПДАУН ПОЛЬЗОВАТЕЛЯ
    ============================================================ */
@@ -953,6 +1002,7 @@ document.querySelector('.sidebar').addEventListener('click', async (e) => {
 
 document.getElementById('themeToggle').addEventListener('click', () => {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
+  setStoredTheme(state.theme);
   saveState(); render();
 });
 
@@ -1036,6 +1086,14 @@ document.getElementById('searchClear').addEventListener('click', () => {
   document.getElementById('searchInput').value = '';
   state.currentPage = 1;
   renderWords(); renderPagination();
+});
+document.getElementById('posFilter').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-pos]');
+  if (!btn) return;
+  const val = btn.getAttribute('data-pos') || '';
+  posFilter = val;
+  state.currentPage = 1;
+  render();
 });
 
 document.getElementById('shuffleBtn').addEventListener('click', (e) => {
@@ -2223,10 +2281,18 @@ async function initApp() {
     };
     await fbSaveState(currentUserName, cloudState);
   }
-  state = { ...defaultState, ...cloudState };
+    state = { ...defaultState, ...cloudState };
   if (!state.userName) state.userName = currentUserName;
 
-    document.body.setAttribute('data-theme', state.theme);
+  // Синхронизация темы: если в Firestore нет — берём из localStorage,
+  // и наоборот — обновляем localStorage
+  if (state.theme && state.theme !== getStoredTheme()) {
+    setStoredTheme(state.theme);
+  } else if (!state.theme) {
+    state.theme = getStoredTheme();
+  }
+
+  document.body.setAttribute('data-theme', state.theme);
 
   if ((state.dailyGoal || 0) > 0) {
     ensureTodayProgress();
